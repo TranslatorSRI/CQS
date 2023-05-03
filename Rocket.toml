@@ -1,0 +1,28 @@
+[default.limits]
+json = "1 MiB"
+msgpack = "2 MiB"
+"file/jpg" = "5 MiB"
+
+[default]
+ident = "CQS"
+path_whitelist=["d"]
+#workflow_runner_url="https://translator-workflow-runner.test.transltr.io/query"
+workflow_runner_url="https://translator-workflow-runner.renci.org/query"
+#workflow_runner_url="https://translator-workflow-runner.ci.transltr.io/query"
+#workflow_runner_url="https://translator-workflow-runner.transltr.io/query"
+
+[debug]
+address = "127.0.0.1"
+port = 8000
+workers = 1
+keep_alive = 0
+log_level = "debug"
+
+[release]
+address = "0.0.0.0"
+port = 8000
+workers = 4
+keep_alive = 5
+log_level = "normal"
+extra = false
+
