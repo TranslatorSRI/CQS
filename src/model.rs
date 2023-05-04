@@ -193,6 +193,7 @@ pub struct Response {
 }
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[schemars(example = "example_query")]
 pub struct Query {
     pub message: Message,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -203,6 +204,19 @@ pub struct Query {
     pub workflow: Option<Vec<Workflow>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub submitter: Option<String>,
+}
+
+fn example_query() -> Query {
+    let data = r#"{
+      "message": {
+        "query_graph": {
+          "nodes": {"n1": {"ids": ["MONDO:0009061", "MONDO:0004979"]}, "n0": {"categories": ["biolink:ChemicalEntity"]}},
+          "edges": {"e0": {"subject": "n0", "object": "n1", "predicates": ["biolink:treats"], "knowledge_type": "inferred"}}
+        }
+      }
+    }"#;
+    let query: Query = serde_json::from_str(data).expect("could not parse example Query data");
+    query
 }
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
