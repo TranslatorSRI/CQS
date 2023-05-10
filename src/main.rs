@@ -139,7 +139,7 @@ pub fn create_server() -> Rocket<Build> {
         )
         .attach(AdHoc::config::<CQSConfig>());
 
-    let mut openapi_settings = rocket_okapi::settings::OpenApiSettings::default();
+    let openapi_settings = rocket_okapi::settings::OpenApiSettings::default();
     let custom_route_spec = (vec![], openapi::custom_openapi_spec());
     mount_endpoints_and_merged_docs! {
         building_rocket, "/".to_owned(), openapi_settings,
