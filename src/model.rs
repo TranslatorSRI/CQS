@@ -1,10 +1,8 @@
-extern crate serde;
-// extern crate serde_derive;
-
 use rocket_okapi::okapi::schemars;
 use rocket_okapi::okapi::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_with::skip_serializing_none;
 use std::collections::HashMap;
 
 pub type BiolinkEntity = String;
@@ -27,77 +25,69 @@ pub enum KnowledgeType {
     INFERRED,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct LogEntry {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub level: Option<LogLevel>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct NodeBinding {
     pub id: CURIE,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub query_id: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes: Option<Vec<Attribute>>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct EdgeBinding {
     pub id: String,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes: Option<Vec<Attribute>>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Result {
     pub node_bindings: HashMap<String, Vec<NodeBinding>>,
 
     pub edge_bindings: HashMap<String, Vec<EdgeBinding>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub score: Option<f64>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Attribute {
     pub attribute_type_id: CURIE,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub original_attribute_name: Option<String>,
 
     pub value: Value,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub value_type_id: Option<CURIE>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub attribute_source: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub value_url: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     // #[serde(skip_serializing_if = "Value::is_null")]
     pub attributes: Option<Vec<Value>>,
     // pub attributes: Option<Vec<Attribute>>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct AttributeConstraint {
     pub id: CURIE,
@@ -110,10 +100,8 @@ pub struct AttributeConstraint {
 
     pub value: String,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub unit_id: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub unit_name: Option<String>,
 }
 
@@ -129,28 +117,24 @@ pub struct QualifierConstraint {
     qualifier_set: Vec<Qualifier>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct QNode {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub ids: Option<Vec<CURIE>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(regex(pattern = r"^biolink:[A-Z][a-zA-Z]*$"))]
     pub categories: Option<Vec<BiolinkEntity>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_set: Option<bool>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub constraints: Option<Vec<AttributeConstraint>>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct QEdge {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub knowledge_type: Option<KnowledgeType>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(regex(pattern = r"^biolink:[a-z][a-z_]*$"))]
     pub predicates: Option<Vec<BiolinkPredicate>>,
 
@@ -158,10 +142,8 @@ pub struct QEdge {
 
     pub object: String,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub attribute_constraints: Option<Vec<AttributeConstraint>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub qualifier_constraints: Option<Vec<QualifierConstraint>>,
 }
 
@@ -172,22 +154,20 @@ pub struct QueryGraph {
     pub edges: HashMap<String, QEdge>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Node {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(regex(pattern = r"^biolink:[A-Z][a-zA-Z]*$"))]
     pub categories: Option<Vec<BiolinkEntity>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes: Option<Vec<Attribute>>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Edge {
-    #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(regex(pattern = r"^biolink:[a-z][a-z_]*$"))]
     pub predicate: Option<BiolinkPredicate>,
 
@@ -195,10 +175,8 @@ pub struct Edge {
 
     pub object: CURIE,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes: Option<Vec<Attribute>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub qualifiers: Option<Vec<Qualifier>>,
 }
 
@@ -209,15 +187,13 @@ pub struct KnowledgeGraph {
     pub edges: HashMap<String, Edge>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Message {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub results: Option<Vec<Result>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub query_graph: Option<QueryGraph>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub knowledge_graph: Option<KnowledgeGraph>,
 }
 
@@ -230,38 +206,32 @@ pub struct Workflow {
     pub runner_parameters: Option<HashMap<String, Value>>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Response {
     pub message: Message,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub logs: Option<Vec<LogEntry>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub workflow: Option<Vec<Workflow>>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[schemars(example = "example_query")]
 pub struct Query {
     pub message: Message,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub log_level: Option<LogLevel>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub logs: Option<Vec<LogEntry>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub workflow: Option<Vec<Workflow>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub submitter: Option<String>,
 }
 
@@ -278,49 +248,45 @@ fn example_query() -> Query {
     query
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct AsyncQuery {
     pub callback: String,
 
     pub message: Message,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub log_level: Option<LogLevel>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub logs: Option<Vec<LogEntry>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub workflow: Option<Vec<Workflow>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub submitter: Option<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct MetaAttribute {
     pub attribute_type_id: CURIE,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub attribute_source: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub original_attribute_names: Option<Vec<String>>,
 
     pub constraint_use: bool,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub constraint_name: Option<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct MetaNode {
     pub id_prefixes: Vec<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes: Option<Vec<MetaAttribute>>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct MetaEdge {
     #[schemars(regex(pattern = r"^biolink:[A-Z][a-zA-Z]*$"))]
@@ -332,10 +298,8 @@ pub struct MetaEdge {
     #[schemars(regex(pattern = r"^biolink:[A-Z][a-zA-Z]*$"))]
     pub object: BiolinkEntity,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub knowledge_types: Option<Vec<String>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes: Option<Vec<MetaAttribute>>,
 }
 
