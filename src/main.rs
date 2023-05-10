@@ -1,3 +1,4 @@
+#![recursion_limit = "64"]
 #![feature(get_many_mut)]
 #[macro_use]
 extern crate rocket;
@@ -12,12 +13,12 @@ use rocket::serde::{json::Json, Deserialize};
 use rocket::{Build, Rocket, State};
 use rocket_okapi::okapi::openapi3::*;
 use rocket_okapi::{mount_endpoints_and_merged_docs, openapi, openapi_get_routes_spec, swagger_ui::*};
-use serde_json::Value;
-use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 
-pub mod model;
+mod model;
+mod openapi;
+mod util;
 
 #[derive(Deserialize, Debug)]
 #[serde(crate = "rocket::serde")]
@@ -88,34 +89,8 @@ async fn query(data: Json<Query>, config: &State<CQSConfig>) -> Json<Query> {
     if query.message.knowledge_graph.is_none() && query.message.results.is_none() {
         Json(query)
     } else {
-        Json(merge_query_results(query).expect("failed to merge results"))
+        Json(util::merge_query_results(query).expect("failed to merge results"))
     }
-}
-
-fn merge_query_results(mut query: Query) -> Result<Query, Box<dyn Error>> {
-    if let Some(ref mut results) = query.message.results {
-        let tc = (0..results.len()).tuple_combinations::<(usize, usize)>();
-        for (a, b) in tc {
-            if let Ok([result_a, result_b]) = results.get_many_mut([a, b]) {
-                if result_a.score.is_none() && result_b.score.is_none() && result_a.node_bindings == result_b.node_bindings {
-                    for (asdf_edge_key, asdf_edge_value) in result_a.edge_bindings.iter_mut() {
-                        if let Some(qwer_edge_value) = result_b.edge_bindings.get_mut(asdf_edge_key) {
-                            let mut set = asdf_edge_value.clone();
-                            qwer_edge_value.iter().for_each(|a| {
-                                if !set.contains(a) {
-                                    set.push(a.clone());
-                                }
-                            });
-                            *asdf_edge_value = set.clone();
-                            *qwer_edge_value = set.clone();
-                        }
-                    }
-                }
-            }
-        }
-        results.dedup();
-    }
-    Ok(query)
 }
 
 async fn post_to_workflow_runner(path: &str, curie_token: &str, workflow_runner_url: &str) -> std::result::Result<Query, Box<dyn Error + Send + Sync>> {
@@ -138,6 +113,7 @@ async fn post_to_workflow_runner(path: &str, curie_token: &str, workflow_runner_
     while let Some(chunk) = response.body_mut().data().await {
         response_data.push_str(std::str::from_utf8(&*chunk?)?);
     }
+    fs::write("/tmp/asdf.json", response_data.as_str()).expect("could not write data");
     let query = serde_json::from_str(response_data.as_str()).expect("could not parse Query");
     Ok(query)
 }
@@ -163,8 +139,8 @@ pub fn create_server() -> Rocket<Build> {
         )
         .attach(AdHoc::config::<CQSConfig>());
 
-    let openapi_settings = rocket_okapi::settings::OpenApiSettings::default();
-    let custom_route_spec = (vec![], custom_openapi_spec());
+    let mut openapi_settings = rocket_okapi::settings::OpenApiSettings::default();
+    let custom_route_spec = (vec![], openapi::custom_openapi_spec());
     mount_endpoints_and_merged_docs! {
         building_rocket, "/".to_owned(), openapi_settings,
         "/external" => custom_route_spec,
@@ -175,92 +151,4 @@ pub fn create_server() -> Rocket<Build> {
 
 pub fn get_routes_and_docs(settings: &rocket_okapi::settings::OpenApiSettings) -> (Vec<rocket::Route>, OpenApi) {
     openapi_get_routes_spec![settings: query]
-}
-
-fn custom_openapi_spec() -> OpenApi {
-    OpenApi {
-        openapi: OpenApi::default_version(),
-        info: Info {
-            title: "Curated Query Service".to_owned(),
-            description: Some("When a TRAPI message meets the condition of using a one-hop query with a 'biolink:treats' predicate AND a 'knowledge_type' of 'inferred', then run the templated queries using the specified curie identifiers.".to_owned()),
-            terms_of_service: Some("https://github.com/TranslatorSRI/CQS/blob/master/LICENSE".to_owned()),
-            contact: Some(Contact {
-                name: Some("CQS".to_owned()),
-                url: Some("https://github.com/TranslatorSRI/CQS".to_owned()),
-                email: Some("jdr0887@renci.org".to_owned()),
-                extensions: {
-                    let raw_extensions = r#"{
-                        "x-id": "https://github.com/jdr0887",
-                        "x-role": "responsible developer"
-                    }"#;
-                    let raw_extensions_map: HashMap<String, Value> = serde_json::from_str(raw_extensions).unwrap();
-                    Object::from_iter(raw_extensions_map)
-                },
-            }),
-            license: Some(License {
-                name: "MIT".to_owned(),
-                url: Some("https://github.com/TranslatorSRI/CQS/blob/master/LICENSE".to_owned()),
-                ..Default::default()
-            }),
-            version: env!("CARGO_PKG_VERSION").to_owned(),
-            extensions: {
-                let raw_extensions = r#"{
-                    "x-translator": {
-                        "component": "KP",
-                        "team": [ "Clinical Data Provider" ],
-                        "biolink-version": "3.1.2",
-                        "infores": "infores:cqs"
-                    },
-                    "x-trapi": {
-                        "version": "1.3.0",
-                        "asyncquery": false,
-                        "operations": [ "lookup" ],
-                        "batch_size_limit": 100,
-                        "rate_limit": 10
-                    }
-                }"#;
-                let raw_extensions_map: HashMap<String, Value> = serde_json::from_str(raw_extensions).unwrap();
-                Object::from_iter(raw_extensions_map)
-            },
-        },
-        servers: vec![Server {
-            url: "https://cqs-dev.apps.renci.org/v0.1".to_owned(),
-            description: Some("development".to_owned()),
-            extensions: {
-                let raw_extensions = r#"{
-                    "x-maturity": "development",
-                    "x-location": "RENCI",
-                    "x-trapi": "1.3.0"
-                }"#;
-                let raw_extensions_map: HashMap<String, Value> = serde_json::from_str(raw_extensions).unwrap();
-                Object::from_iter(raw_extensions_map)
-            },
-            ..Default::default()
-        }],
-        paths: Default::default(),
-        components: None,
-        security: vec![],
-        tags: vec![],
-        // tags: vec![
-        //     Tag {
-        //         name: "translator".to_owned(),
-        //         ..Default::default()
-        //     },
-        //     Tag {
-        //         name: "trapi".to_owned(),
-        //         ..Default::default()
-        //     },
-        // ],
-        external_docs: None,
-        extensions: {
-            let raw_extensions = r#"{
-                "tags": [
-                    { "name": "translator" },
-                    { "name": "trapi" }
-                ]
-            }"#;
-            let raw_extensions_map: HashMap<String, Value> = serde_json::from_str(raw_extensions).unwrap();
-            Object::from_iter(raw_extensions_map)
-        },
-    }
 }
