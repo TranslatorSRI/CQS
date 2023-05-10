@@ -3,7 +3,7 @@ use rocket_okapi::okapi::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::skip_serializing_none;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub type BiolinkEntity = String;
 pub type BiolinkPredicate = String;
@@ -44,7 +44,7 @@ pub struct NodeBinding {
 
     pub query_id: Option<String>,
 
-    pub attributes: Option<Vec<Attribute>>,
+    pub attributes: Option<HashMap<String, Value>>,
 }
 
 #[skip_serializing_none]
@@ -421,16 +421,22 @@ mod test {
     }
 
     #[test]
-    // #[ignore]
+    #[ignore]
     fn scratch() {
         // let data = fs::read_to_string("/tmp/message.pretty.json").unwrap();
         let data = fs::read_to_string("/tmp/sample_query.pretty.json").unwrap();
         // let data = fs::read_to_string("/tmp/response_1683229618787.json").unwrap();
         let potential_query: Result<Query> = serde_json::from_str(data.as_str());
-        if let Err(error) = potential_query {
-            println!("{}", error);
-            assert!(false);
+        match potential_query {
+            Err(error) => {
+                println!("{}", error);
+                assert!(false);
+            }
+            Ok(query) => {
+                let pretty_query = serde_json::to_string_pretty(&query).unwrap();
+                fs::write("/tmp/output.pretty.json", pretty_query).unwrap();
+                assert!(true);
+            }
         }
-        assert!(true);
     }
 }
