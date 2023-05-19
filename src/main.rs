@@ -1,9 +1,8 @@
-#![recursion_limit = "64"]
 #![feature(get_many_mut)]
 #[macro_use]
 extern crate rocket;
 
-use crate::model::{KnowledgeType, Query};
+use crate::model::{Analysis, EdgeBinding, KnowledgeType, Query};
 use futures::future::join_all;
 use hyper::body::HttpBody;
 use hyper_tls::HttpsConnector;
@@ -13,6 +12,7 @@ use rocket::serde::{json::Json, Deserialize};
 use rocket::{Build, Rocket, State};
 use rocket_okapi::okapi::openapi3::*;
 use rocket_okapi::{mount_endpoints_and_merged_docs, openapi, openapi_get_routes_spec, swagger_ui::*};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 
@@ -63,7 +63,7 @@ async fn query(data: Json<Query>, config: &State<CQSConfig>) -> Json<Query> {
         }
     }
 
-    for r in responses.into_iter() {
+    responses.into_iter().for_each(|r| {
         if let Some(kg) = r.message.knowledge_graph {
             match &mut query.message.knowledge_graph {
                 Some(qmkg) => {
@@ -85,12 +85,45 @@ async fn query(data: Json<Query>, config: &State<CQSConfig>) -> Json<Query> {
                 }
             }
         }
+    });
+
+    let map = util::build_node_binding_to_log_odds_data_map(&mut query);
+
+    if let Some(query_graph) = &query.message.query_graph {
+        //this should be a one-hop query so assume only one entry
+        if let Some((qg_key, qg_edge)) = query_graph.edges.iter().next() {
+            let subject = qg_edge.subject.as_str(); // something like 'n0'
+            let object = qg_edge.object.as_str(); // something like 'n1'
+
+            match &mut query.message.results {
+                None => {}
+                Some(results) => {
+                    results.iter_mut().for_each(|r| {
+                        if let (Some(subject_nb), Some(object_nb)) = (r.node_bindings.get(subject), r.node_bindings.get(object)) {
+                            if let (Some(first_subject_nb), Some(first_object_nb)) = (subject_nb.iter().next(), object_nb.iter().next()) {
+                                if let Some((_entry_key, entry_values)) = map.iter().find(|(k, _v)| first_subject_nb.id == k.0 && first_object_nb.id == k.2) {
+                                    let sum_of_n: i64 = entry_values.iter().map(|a| a.3.unwrap()).sum(); // (N1 + N2 + N3)
+                                    let sum_of_weights = entry_values.iter().map(|ev| (ev.3.unwrap() / sum_of_n) as f64).sum::<f64>(); // (W1 + W2 + W3)
+                                    let score_numerator = entry_values.iter().map(|ev| (ev.3.unwrap() / sum_of_n) as f64 * ev.2.unwrap()).sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
+                                    entry_values.iter().for_each(|ev| {
+                                        let mut edge_binding_map = HashMap::new();
+                                        edge_binding_map.insert(qg_key.clone(), vec![EdgeBinding::new(ev.1.parse().unwrap())]);
+                                        let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
+                                        analysis.score = Some(score_numerator / sum_of_weights);
+                                        analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
+                                        r.analyses.push(analysis);
+                                    });
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        }
     }
-    if query.message.knowledge_graph.is_none() && query.message.results.is_none() {
-        Json(query)
-    } else {
-        Json(util::merge_query_results(query).expect("failed to merge results"))
-    }
+
+    Json(query)
+    // Json(util::merge_query_results(query).expect("failed to merge results"))
 }
 
 async fn post_to_workflow_runner(path: &str, curie_token: &str, workflow_runner_url: &str) -> std::result::Result<Query, Box<dyn Error + Send + Sync>> {
@@ -113,7 +146,7 @@ async fn post_to_workflow_runner(path: &str, curie_token: &str, workflow_runner_
     while let Some(chunk) = response.body_mut().data().await {
         response_data.push_str(std::str::from_utf8(&*chunk?)?);
     }
-    fs::write("/tmp/asdf.json", response_data.as_str()).expect("could not write data");
+    // fs::write("/tmp/asdf.json", response_data.as_str()).expect("could not write data");
     let query = serde_json::from_str(response_data.as_str()).expect("could not parse Query");
     Ok(query)
 }
