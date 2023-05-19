@@ -3,7 +3,7 @@ use rocket_okapi::okapi::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::skip_serializing_none;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 pub type BiolinkEntity = String;
 pub type BiolinkPredicate = String;
@@ -25,6 +25,14 @@ pub enum KnowledgeType {
     INFERRED,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ResourceRoleEnum {
+    PrimaryKnowledgeSource,
+    AggregatorKnowledgeSource,
+    SupportingDataSource,
+}
+
 #[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct LogEntry {
@@ -42,9 +50,38 @@ pub struct LogEntry {
 pub struct NodeBinding {
     pub id: CURIE,
 
-    pub query_id: Option<String>,
+    pub query_id: Option<CURIE>,
 
-    pub attributes: Option<HashMap<String, Value>>,
+    pub attributes: Option<Vec<Attribute>>,
+}
+
+#[skip_serializing_none]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct Analysis {
+    pub resource_id: String,
+
+    pub score: Option<f64>,
+
+    pub scoring_method: Option<String>,
+
+    pub support_graphs: Option<Vec<String>>,
+
+    pub edge_bindings: HashMap<String, Vec<EdgeBinding>>,
+
+    pub attributes: Option<Vec<Attribute>>,
+}
+
+impl Analysis {
+    pub fn new(resource_id: String, edge_bindings: HashMap<String, Vec<EdgeBinding>>) -> Analysis {
+        Analysis {
+            resource_id,
+            score: None,
+            scoring_method: None,
+            support_graphs: None,
+            edge_bindings,
+            attributes: None,
+        }
+    }
 }
 
 #[skip_serializing_none]
@@ -55,14 +92,17 @@ pub struct EdgeBinding {
     pub attributes: Option<Vec<Attribute>>,
 }
 
-#[skip_serializing_none]
+impl EdgeBinding {
+    pub fn new(id: String) -> EdgeBinding {
+        EdgeBinding { id, attributes: None }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Result {
     pub node_bindings: HashMap<String, Vec<NodeBinding>>,
 
-    pub edge_bindings: HashMap<String, Vec<EdgeBinding>>,
-
-    pub score: Option<f64>,
+    pub analyses: Vec<Analysis>,
 }
 
 #[skip_serializing_none]
@@ -82,7 +122,6 @@ pub struct Attribute {
 
     pub description: Option<String>,
 
-    // #[serde(skip_serializing_if = "Value::is_null")]
     pub attributes: Option<Vec<Value>>,
     // pub attributes: Option<Vec<Attribute>>,
 }
@@ -107,19 +146,21 @@ pub struct AttributeConstraint {
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Qualifier {
-    pub qualifier_type_id: String,
+    #[schemars(regex(pattern = r"^biolink:[a-z][a-z_]*$"))]
+    pub qualifier_type_id: CURIE,
 
     pub qualifier_value: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct QualifierConstraint {
-    qualifier_set: Vec<Qualifier>,
+    pub qualifier_set: Vec<Qualifier>,
 }
 
 #[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct QNode {
+    #[schemars(regex(pattern = r"^biolink:[a-z][a-z_]*$"))]
     pub ids: Option<Vec<CURIE>>,
 
     #[schemars(regex(pattern = r"^biolink:[A-Z][a-zA-Z]*$"))]
@@ -135,10 +176,10 @@ pub struct QNode {
 pub struct QEdge {
     pub knowledge_type: Option<KnowledgeType>,
 
+    pub subject: String,
+
     #[schemars(regex(pattern = r"^biolink:[a-z][a-z_]*$"))]
     pub predicates: Option<Vec<BiolinkPredicate>>,
-
-    pub subject: String,
 
     pub object: String,
 
@@ -168,16 +209,30 @@ pub struct Node {
 #[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Edge {
-    #[schemars(regex(pattern = r"^biolink:[a-z][a-z_]*$"))]
-    pub predicate: Option<BiolinkPredicate>,
-
     pub subject: CURIE,
 
+    #[schemars(regex(pattern = r"^biolink:[a-z][a-z_]*$"))]
+    pub predicate: BiolinkPredicate,
+
     pub object: CURIE,
+
+    pub sources: Vec<RetrievalSource>,
 
     pub attributes: Option<Vec<Attribute>>,
 
     pub qualifiers: Option<Vec<Qualifier>>,
+}
+
+#[skip_serializing_none]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RetrievalSource {
+    pub resource_id: CURIE,
+
+    pub resource_role: ResourceRoleEnum,
+
+    pub upstream_resource_ids: Option<Vec<CURIE>>,
+
+    pub source_record_urls: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
@@ -195,8 +250,19 @@ pub struct Message {
     pub query_graph: Option<QueryGraph>,
 
     pub knowledge_graph: Option<KnowledgeGraph>,
+
+    pub auxiliary_graphs: Option<HashMap<String, AuxiliaryGraph>>,
 }
 
+#[skip_serializing_none]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct AuxiliaryGraph {
+    pub edges: Vec<String>,
+
+    pub attributes: Option<Vec<Attribute>>,
+}
+
+#[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Workflow {
     pub id: String,
@@ -218,6 +284,10 @@ pub struct Response {
     pub logs: Option<Vec<LogEntry>>,
 
     pub workflow: Option<Vec<Workflow>>,
+
+    pub schema_version: Option<String>,
+
+    pub biolink_version: Option<String>,
 }
 
 #[skip_serializing_none]
@@ -227,8 +297,6 @@ pub struct Query {
     pub message: Message,
 
     pub log_level: Option<LogLevel>,
-
-    pub logs: Option<Vec<LogEntry>>,
 
     pub workflow: Option<Vec<Workflow>>,
 
@@ -257,11 +325,31 @@ pub struct AsyncQuery {
 
     pub log_level: Option<LogLevel>,
 
-    pub logs: Option<Vec<LogEntry>>,
-
     pub workflow: Option<Vec<Workflow>>,
 
     pub submitter: Option<String>,
+}
+
+#[skip_serializing_none]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct AsyncQueryResponse {
+    pub job_id: String,
+
+    pub status: Option<String>,
+
+    pub description: Option<String>,
+}
+
+#[skip_serializing_none]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct AsyncQueryStatusResponse {
+    pub status: String,
+
+    pub description: String,
+
+    pub logs: Vec<LogEntry>,
+
+    pub response_url: Option<String>,
 }
 
 #[skip_serializing_none]
@@ -273,9 +361,17 @@ pub struct MetaAttribute {
 
     pub original_attribute_names: Option<Vec<String>>,
 
-    pub constraint_use: bool,
+    pub constraint_use: Option<bool>,
 
     pub constraint_name: Option<String>,
+}
+
+#[skip_serializing_none]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct MetaQualifier {
+    pub qualifier_type_id: CURIE,
+
+    pub applicable_values: Option<Vec<String>>,
 }
 
 #[skip_serializing_none]
@@ -289,13 +385,10 @@ pub struct MetaNode {
 #[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct MetaEdge {
-    #[schemars(regex(pattern = r"^biolink:[A-Z][a-zA-Z]*$"))]
     pub subject: BiolinkEntity,
 
-    #[schemars(regex(pattern = r"^biolink:[a-z][a-z_]*$"))]
     pub predicate: BiolinkPredicate,
 
-    #[schemars(regex(pattern = r"^biolink:[A-Z][a-zA-Z]*$"))]
     pub object: BiolinkEntity,
 
     pub knowledge_types: Option<Vec<String>>,
@@ -312,67 +405,89 @@ pub struct MetaKnowledgeGraph {
 
 #[cfg(test)]
 mod test {
-    use crate::model::{Message, Query};
-    use serde_json::Result;
+    use crate::model::{Analysis, Attribute, EdgeBinding, Message, NodeBinding, Query, ResourceRoleEnum, CURIE};
+    use crate::util;
+    use itertools::{all, Itertools};
+    use serde::Deserializer;
+    use serde_json::{Result, Value};
+    use std::collections::HashMap;
     use std::fs;
 
     #[test]
+    #[ignore]
     fn untyped_example() {
         // Some JSON input data as a &str. Maybe this comes from the user.
         let data = r#"{
-    "query_graph": {
-        "nodes": {
-            "n0": { "categories": ["biolink:Disease"], "ids": ["MONDO:0005737"] },
-            "n1": { "categories": ["biolink:Gene"] }
-        },
-        "edges": {
-            "e01": { "subject": "n0", "object": "n1" }
-        }
-    },
-    "knowledge_graph": {
-        "nodes": {
-            "MONDO:0005737": { "categories": ["biolink:Disease"], "name": "Ebola hemorrhagic fever" },
-            "HGNC:17770": { "categories": ["biolink:Gene"], "name": "RALGAPA1" },
-            "HGNC:13236": { "categories": ["biolink:Gene"], "name": "URI1" }
-        },
-        "edges": {
-            "x17770": { "predicate": "biolink:related_to", "subject": "MONDO:0005737", "object": "HGNC:17770" },
-            "x13236": { "predicate": "biolink:related_to", "subject": "MONDO:0005737", "object": "HGNC:13236" }
-        }
-    },
-    "results": [
-        {
-            "node_bindings": {
-                "n0": [ { "id": "MONDO:0005737" } ],
-                "n1": [ { "id": "HGNC:17770" } ]
+            "query_graph": {
+                "nodes": {
+                    "n0": { "categories": ["biolink:Disease"], "ids": ["MONDO:0005737"] },
+                    "n1": { "categories": ["biolink:Gene"] }
+                },
+                "edges": {
+                    "e01": { "subject": "n0", "object": "n1" }
+                }
             },
-            "edge_bindings": { 
-                "e01": [ { "id": "x17770" } ]
-            }
-        },
-        {
-            "node_bindings": {
-                "n0": [ { "id": "MONDO:0005737" } ],
-                "n1": [ { "id": "HGNC:13236" } ]
+            "knowledge_graph": {
+                "nodes": {
+                    "MONDO:0005737": { "categories": ["biolink:Disease"], "name": "Ebola hemorrhagic fever" },
+                    "HGNC:17770": { "categories": ["biolink:Gene"], "name": "RALGAPA1" },
+                    "HGNC:13236": { "categories": ["biolink:Gene"], "name": "URI1" }
+                },
+                "edges": {
+                    "x17770": { 
+                        "predicate": "biolink:related_to", 
+                        "subject": "MONDO:0005737", 
+                        "object": "HGNC:17770", 
+                        "sources": [{
+                            "resource_id": "infores:kp0",
+                            "resource_role": "primary_knowledge_source"
+                        }]
+                    },
+                    "x13236": { 
+                        "predicate": "biolink:related_to", 
+                        "subject": "MONDO:0005737", 
+                        "object": "HGNC:13236",
+                        "sources": [{
+                            "resource_id": "infores:kp1",
+                            "resource_role": "primary_knowledge_source"
+                        }]
+                    }
+                }
             },
-            "edge_bindings": {
-                "e01": [ { "id": "x13236" } ]
+            "results": [
+                {
+                    "node_bindings": {
+                        "n0": [ { "id": "MONDO:0005737" } ],
+                        "n1": [ { "id": "HGNC:17770" } ]
+                    },
+                    "analyses": [{
+                        "resource_id": "infores:kp0",
+                        "edge_bindings": {
+                          "e01": [{ "id": "x13236" }]
+                        }
+                    }]
+                }
+            ]
+        }"#;
+
+        let message_result: Result<Message> = serde_json::from_str(data);
+        match message_result {
+            Err(err) => {
+                print!("{}", err);
+                assert!(false);
+            }
+            Ok(message) => {
+                let query_graph = message.query_graph;
+                assert!(query_graph.is_some());
+                let ids = query_graph.and_then(|a| a.nodes.get("n0").and_then(|b| b.ids.clone()));
+                assert!(ids.is_some());
+                println!("{:?}", ids);
             }
         }
-    ]
-}"#;
-
-        let message: Message = serde_json::from_str(data).expect("could not parse Message");
-        let query_graph = message.query_graph;
-        assert!(query_graph.is_some());
-        let ids = query_graph.and_then(|a| a.nodes.get("n0").and_then(|b| b.ids.clone()));
-        assert!(ids.is_some());
-        println!("{:?}", ids);
-
-        assert!(true);
     }
 
     #[test]
+    #[ignore]
     fn treats_inferred() {
         // Some JSON input data as a &str. Maybe this comes from the user.
         let data = r#"{ 
@@ -390,6 +505,7 @@ mod test {
 
     #[test]
     #[should_panic]
+    #[ignore]
     fn invalid_biolink_entity() {
         let data = r#"{ 
             "message": { 
@@ -406,6 +522,7 @@ mod test {
 
     #[test]
     #[should_panic]
+    #[ignore]
     fn invalid_biolink_predicate() {
         let data = r#"{ 
             "message": { 
@@ -421,10 +538,87 @@ mod test {
     }
 
     #[test]
-    #[ignore]
-    fn scratch() {
+    fn composite_score() {
         // let data = fs::read_to_string("/tmp/message.pretty.json").unwrap();
-        let data = fs::read_to_string("/tmp/sample_query.pretty.json").unwrap();
+        let data = fs::read_to_string("/tmp/sample_input.pretty.json").unwrap();
+        // let data = fs::read_to_string("/tmp/response_1683229618787.json").unwrap();
+        let potential_query: Result<Query> = serde_json::from_str(data.as_str());
+        if let Some(mut query) = potential_query.ok() {
+            let mut map = util::build_node_binding_to_log_odds_data_map(&mut query);
+            // map.iter().for_each(|(k, v)| println!("k: {:?}, values: {:?}", k, v));
+
+            // icees-kg: log_odds_ratio = OR1
+            // total_sample_size =  N1
+            // weight = W1 = N1/(N1 + N2 + N3)
+            //
+            // cohd: log_odds_ratio = OR2
+            // total_sample_size =  N2
+            // weight = W2 = N2/(N1 + N2 + N3)
+            //
+            // multiomics-ehr-risk-provider: log_odds_ratio = OR3
+            // total_sample_size =  N3
+            // weight = W3  = N3/(N1 + N2 + N3)
+            //
+            // Score = (W1 * OR1 + W2 * OR2 + W3 * OR3) / (W1 + W2 + W3)
+
+            if let Some(query_graph) = &query.message.query_graph {
+                //this should be a one-hop query so assume only one entry
+                if let Some((qg_key, qg_edge)) = query_graph.edges.iter().next() {
+                    let subject = qg_edge.subject.as_str(); // something like 'n0'
+                    let object = qg_edge.object.as_str(); // something like 'n1'
+
+                    match &mut query.message.results {
+                        None => {}
+                        Some(results) => {
+                            results.iter_mut().for_each(|r| {
+                                if let (Some(subject_nb), Some(object_nb)) = (r.node_bindings.get(subject), r.node_bindings.get(object)) {
+                                    if let (Some(first_subject_nb), Some(first_object_nb)) = (subject_nb.iter().next(), object_nb.iter().next()) {
+                                        if let Some((entry_key, entry_values)) = map.iter().find(|(k, v)| first_subject_nb.id == k.0 && first_object_nb.id == k.2) {
+                                            let sum_of_n: i64 = entry_values.iter().map(|a| a.3.unwrap()).sum(); // (N1 + N2 + N3)
+                                            let sum_of_weights = entry_values.iter().map(|ev| (ev.3.unwrap() / sum_of_n) as f64).sum::<f64>(); // (W1 + W2 + W3)
+                                            let score_numerator = entry_values.iter().map(|ev| (ev.3.unwrap() / sum_of_n) as f64 * ev.2.unwrap()).sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
+
+                                            // if first_object_nb.id == "RXCUI:205532" && first_subject_nb.id == "MONDO:0009061" {
+                                            //     println!(
+                                            //         "sum_of_n: {}, sum_of_weights: {}, score_numerator: {}, entry_values: {:?}",
+                                            //         sum_of_n, sum_of_weights, score_numerator, entry_values
+                                            //     );
+                                            // }
+                                            entry_values.iter().for_each(|ev| {
+                                                let mut edge_binding_map = HashMap::new();
+                                                edge_binding_map.insert(qg_key.clone(), vec![EdgeBinding::new(ev.1.parse().unwrap())]);
+                                                let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
+                                                analysis.score = Some(score_numerator / sum_of_weights);
+                                                analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
+                                                r.analyses.push(analysis);
+                                            });
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+            let sample_output_result = serde_json::to_string_pretty(&query);
+            match sample_output_result {
+                Err(error) => {
+                    println!("{}", error);
+                    assert!(false);
+                }
+                Ok(sample_output) => {
+                    fs::write("/tmp/sample_output.pretty.json", sample_output).unwrap();
+                    assert!(true);
+                }
+            }
+        }
+    }
+
+    #[test]
+    // #[ignore]
+    fn scratch() {
+        let data = fs::read_to_string("/tmp/asdf.pretty.json").unwrap();
+        // let data = fs::read_to_string("/tmp/scratch-icees.json").unwrap();
         // let data = fs::read_to_string("/tmp/response_1683229618787.json").unwrap();
         let potential_query: Result<Query> = serde_json::from_str(data.as_str());
         match potential_query {
@@ -433,8 +627,8 @@ mod test {
                 assert!(false);
             }
             Ok(query) => {
-                let pretty_query = serde_json::to_string_pretty(&query).unwrap();
-                fs::write("/tmp/output.pretty.json", pretty_query).unwrap();
+                // let pretty_query = serde_json::to_string_pretty(&query).unwrap();
+                // fs::write("/tmp/scratch-icees.pretty.json", pretty_query).unwrap();
                 assert!(true);
             }
         }
