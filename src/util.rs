@@ -110,7 +110,7 @@ pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQS
 
 pub fn build_name_resovler_map(query: &mut Query) -> HashMap<String, Vec<String>> {
     let map = HashMap::new();
-
+    // TODO not yet implemented
     map
 }
 
