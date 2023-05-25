@@ -1,8 +1,10 @@
 #![feature(get_many_mut)]
 #[macro_use]
 extern crate rocket;
+#[macro_use]
+extern crate log;
 
-use crate::model::{Analysis, EdgeBinding, KnowledgeType, Query};
+use crate::model::{KnowledgeType, Query};
 use futures::future::join_all;
 use hyper::body::HttpBody;
 use hyper_tls::HttpsConnector;
@@ -12,7 +14,6 @@ use rocket::serde::{json::Json, Deserialize};
 use rocket::{Build, Rocket, State};
 use rocket_okapi::okapi::openapi3::*;
 use rocket_okapi::{mount_endpoints_and_merged_docs, openapi, openapi_get_routes_spec, swagger_ui::*};
-use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 
@@ -25,17 +26,20 @@ mod util;
 struct CQSConfig {
     path_whitelist: Vec<String>,
     workflow_runner_url: String,
+    name_resolver_url: String,
 }
 
 #[openapi]
 #[post("/query", data = "<data>")]
 async fn query(data: Json<Query>, config: &State<CQSConfig>) -> Json<Query> {
     // info!("{:?}", config);
-    // let mut query: Query = serde_json::from_str(data).expect("could not parse Query");
-    let mut query: Query = data.into_inner();
-    let workflow_runner_url = &config.workflow_runner_url;
+    let workflow_runner_url = format!("{}/query", &config.workflow_runner_url);
+    let name_resolver_url = format!("{}/reverse_lookup", &config.name_resolver_url);
     let whitelisted_paths = &config.path_whitelist;
+
+    let mut query: Query = data.into_inner();
     let mut responses: Vec<Query> = vec![];
+
     if let Some(query_graph) = &query.message.query_graph {
         if let Some((_edge_key, edge_value)) = &query_graph.edges.iter().find(|(_k, v)| {
             if let (Some(predicates), Some(knowledge_type)) = (&v.predicates, &v.knowledge_type) {
@@ -52,7 +56,7 @@ async fn query(data: Json<Query>, config: &State<CQSConfig>) -> Json<Query> {
                         .iter()
                         .map(|path| post_to_workflow_runner(path.as_str(), curie_token.as_str(), workflow_runner_url.as_str()))
                         .collect();
-                    let joined_future_responses: Vec<std::result::Result<Query, Box<dyn Error + Send + Sync>>> = join_all(future_responses).await;
+                    let joined_future_responses: Vec<Result<Query, Box<dyn Error + Send + Sync>>> = join_all(future_responses).await;
                     joined_future_responses.into_iter().for_each(|r| {
                         if let Ok(query) = r {
                             responses.push(query);
@@ -63,74 +67,29 @@ async fn query(data: Json<Query>, config: &State<CQSConfig>) -> Json<Query> {
         }
     }
 
-    responses.into_iter().for_each(|r| {
-        if let Some(kg) = r.message.knowledge_graph {
-            match &mut query.message.knowledge_graph {
-                Some(qmkg) => {
-                    qmkg.nodes.extend(kg.nodes);
-                    qmkg.edges.extend(kg.edges);
-                }
-                None => {
-                    query.message.knowledge_graph = Some(kg);
-                }
-            }
-        }
-        if let Some(results) = r.message.results {
-            match &mut query.message.results {
-                Some(qmr) => {
-                    qmr.extend(results);
-                }
-                None => {
-                    query.message.results = Some(results);
-                }
-            }
-        }
-    });
-
-    let map = util::build_node_binding_to_log_odds_data_map(&mut query);
-
-    if let Some(query_graph) = &query.message.query_graph {
-        //this should be a one-hop query so assume only one entry
-        if let Some((qg_key, qg_edge)) = query_graph.edges.iter().next() {
-            let subject = qg_edge.subject.as_str(); // something like 'n0'
-            let object = qg_edge.object.as_str(); // something like 'n1'
-
-            match &mut query.message.results {
-                None => {}
-                Some(results) => {
-                    results.iter_mut().for_each(|r| {
-                        if let (Some(subject_nb), Some(object_nb)) = (r.node_bindings.get(subject), r.node_bindings.get(object)) {
-                            if let (Some(first_subject_nb), Some(first_object_nb)) = (subject_nb.iter().next(), object_nb.iter().next()) {
-                                if let Some((_entry_key, entry_values)) = map.iter().find(|(k, _v)| first_subject_nb.id == k.0 && first_object_nb.id == k.2) {
-                                    let sum_of_n: i64 = entry_values.iter().map(|a| a.3.unwrap()).sum(); // (N1 + N2 + N3)
-                                    let sum_of_weights = entry_values.iter().map(|ev| (ev.3.unwrap() / sum_of_n) as f64).sum::<f64>(); // (W1 + W2 + W3)
-                                    let score_numerator = entry_values.iter().map(|ev| (ev.3.unwrap() / sum_of_n) as f64 * ev.2.unwrap()).sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
-                                    entry_values.iter().for_each(|ev| {
-                                        let mut edge_binding_map = HashMap::new();
-                                        edge_binding_map.insert(qg_key.clone(), vec![EdgeBinding::new(ev.1.parse().unwrap())]);
-                                        let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
-                                        analysis.score = Some(score_numerator / sum_of_weights);
-                                        analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
-                                        r.analyses.push(analysis);
-                                    });
-                                }
-                            }
-                        }
-                    });
-                }
-            }
-        }
+    util::merge_query_responses(&mut query, responses);
+    if let Some(results) = &query.message.results {
+        debug!("results.len(): {}", results.len());
+    }
+    if let Some(kg) = &query.message.knowledge_graph {
+        debug!("kg.edges.len(): {}", kg.edges.len());
     }
 
+    // let curie_to_resolved_names_map = util::build_name_resovler_map(&mut query);
+
+    let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&mut query);
+    debug!("node_binding_to_log_odds_map.len(): {}", node_binding_to_log_odds_map.len());
+
+    let query = util::calculate_composite_score(query, node_binding_to_log_odds_map);
+
     Json(query)
-    // Json(util::merge_query_results(query).expect("failed to merge results"))
 }
 
 async fn post_to_workflow_runner(path: &str, curie_token: &str, workflow_runner_url: &str) -> std::result::Result<Query, Box<dyn Error + Send + Sync>> {
     let file = format!("./src/data/path_{}.template.json", path);
     let mut template = fs::read_to_string(&file).expect(format!("Could not find file: {}", &file).as_str());
     template = template.replace("CURIE_TOKEN", curie_token);
-    info!("template: {}", template);
+    debug!("template: {}", template);
     let request = hyper::Request::builder()
         .uri(workflow_runner_url)
         .header(hyper::header::CONTENT_TYPE, "application/json")
@@ -140,13 +99,13 @@ async fn post_to_workflow_runner(path: &str, curie_token: &str, workflow_runner_
     let https = HttpsConnector::new();
     let client = hyper::Client::builder().build::<_, hyper::Body>(https);
     let mut response = client.request(request).await?;
-    info!("response.status(): {}", response.status());
+    debug!("response.status(): {}", response.status());
 
-    let mut response_data = std::string::String::new();
+    let mut response_data = String::new();
     while let Some(chunk) = response.body_mut().data().await {
         response_data.push_str(std::str::from_utf8(&*chunk?)?);
     }
-    // fs::write("/tmp/asdf.json", response_data.as_str()).expect("could not write data");
+    fs::write("/tmp/asdf.json", response_data.as_str()).expect("could not write data");
     let query = serde_json::from_str(response_data.as_str()).expect("could not parse Query");
     Ok(query)
 }
