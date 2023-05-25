@@ -403,6 +403,21 @@ pub struct MetaKnowledgeGraph {
     pub edges: HashMap<String, MetaEdge>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
+pub struct CQSCompositeScoreKey {
+    pub subject: String,
+    pub predicate: String,
+    pub object: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct CQSCompositeScoreValue {
+    pub resource_id: String,
+    pub knowledge_graph_key: String,
+    pub log_odds_ratio: Option<f64>,
+    pub total_sample_size: Option<i64>,
+}
+
 #[cfg(test)]
 mod test {
     use crate::model::{Analysis, Attribute, EdgeBinding, Message, NodeBinding, Query, ResourceRoleEnum, CURIE};
@@ -573,10 +588,13 @@ mod test {
                             results.iter_mut().for_each(|r| {
                                 if let (Some(subject_nb), Some(object_nb)) = (r.node_bindings.get(subject), r.node_bindings.get(object)) {
                                     if let (Some(first_subject_nb), Some(first_object_nb)) = (subject_nb.iter().next(), object_nb.iter().next()) {
-                                        if let Some((entry_key, entry_values)) = map.iter().find(|(k, v)| first_subject_nb.id == k.0 && first_object_nb.id == k.2) {
-                                            let sum_of_n: i64 = entry_values.iter().map(|a| a.3.unwrap()).sum(); // (N1 + N2 + N3)
-                                            let sum_of_weights = entry_values.iter().map(|ev| (ev.3.unwrap() / sum_of_n) as f64).sum::<f64>(); // (W1 + W2 + W3)
-                                            let score_numerator = entry_values.iter().map(|ev| (ev.3.unwrap() / sum_of_n) as f64 * ev.2.unwrap()).sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
+                                        if let Some((entry_key, entry_values)) = map.iter().find(|(k, v)| first_subject_nb.id == k.subject && first_object_nb.id == k.predicate) {
+                                            let sum_of_n: i64 = entry_values.iter().map(|a| a.total_sample_size.unwrap()).sum(); // (N1 + N2 + N3)
+                                            let sum_of_weights = entry_values.iter().map(|ev| (ev.total_sample_size.unwrap() / sum_of_n) as f64).sum::<f64>(); // (W1 + W2 + W3)
+                                            let score_numerator = entry_values
+                                                .iter()
+                                                .map(|ev| (ev.total_sample_size.unwrap() / sum_of_n) as f64 * ev.log_odds_ratio.unwrap())
+                                                .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
 
                                             // if first_object_nb.id == "RXCUI:205532" && first_subject_nb.id == "MONDO:0009061" {
                                             //     println!(
@@ -586,7 +604,7 @@ mod test {
                                             // }
                                             entry_values.iter().for_each(|ev| {
                                                 let mut edge_binding_map = HashMap::new();
-                                                edge_binding_map.insert(qg_key.clone(), vec![EdgeBinding::new(ev.1.parse().unwrap())]);
+                                                edge_binding_map.insert(qg_key.clone(), vec![EdgeBinding::new(ev.knowledge_graph_key.parse().unwrap())]);
                                                 let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
                                                 analysis.score = Some(score_numerator / sum_of_weights);
                                                 analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
