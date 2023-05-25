@@ -6,10 +6,11 @@ msgpack = "2 MiB"
 [default]
 ident = "CQS"
 path_whitelist=["d"]
-#workflow_runner_url="https://translator-workflow-runner.test.transltr.io/query"
-workflow_runner_url="https://translator-workflow-runner.renci.org/query"
-#workflow_runner_url="https://translator-workflow-runner.ci.transltr.io/query"
-#workflow_runner_url="https://translator-workflow-runner.transltr.io/query"
+#workflow_runner_url="https://translator-workflow-runner.test.transltr.io"
+workflow_runner_url="https://translator-workflow-runner.renci.org"
+#workflow_runner_url="https://translator-workflow-runner.ci.transltr.io"
+#workflow_runner_url="https://translator-workflow-runner.transltr.io"
+name_resolver_url="https://name-resolution-sri.renci.org"
 
 [debug]
 address = "127.0.0.1"
