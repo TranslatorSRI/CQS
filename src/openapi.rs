@@ -37,7 +37,7 @@ pub fn custom_openapi_spec() -> OpenApi {
                         "infores": "infores:cqs"
                     },
                     "x-trapi": {
-                        "version": "1.3.0",
+                        "version": "1.4.0",
                         "asyncquery": false,
                         "operations": [ "lookup" ],
                         "batch_size_limit": 100,
