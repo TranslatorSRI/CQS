@@ -55,7 +55,7 @@ pub fn custom_openapi_spec() -> OpenApi {
                 let raw_extensions = r#"{
                     "x-maturity": "development",
                     "x-location": "RENCI",
-                    "x-trapi": "1.3.0"
+                    "x-trapi": "1.4.0"
                 }"#;
                 let raw_extensions_map: HashMap<String, Value> = serde_json::from_str(raw_extensions).unwrap();
                 Object::from_iter(raw_extensions_map)
