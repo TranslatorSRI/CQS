@@ -406,7 +406,7 @@ pub struct MetaKnowledgeGraph {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub struct CQSCompositeScoreKey {
     pub subject: String,
-    pub predicate: String,
+    // pub predicate: String,
     pub object: String,
 }
 
@@ -586,15 +586,31 @@ mod test {
                         None => {}
                         Some(results) => {
                             results.iter_mut().for_each(|r| {
+                                // r.analyses.clear();
                                 if let (Some(subject_nb), Some(object_nb)) = (r.node_bindings.get(subject), r.node_bindings.get(object)) {
                                     if let (Some(first_subject_nb), Some(first_object_nb)) = (subject_nb.iter().next(), object_nb.iter().next()) {
-                                        if let Some((entry_key, entry_values)) = map.iter().find(|(k, v)| first_subject_nb.id == k.subject && first_object_nb.id == k.predicate) {
-                                            let sum_of_n: i64 = entry_values.iter().map(|a| a.total_sample_size.unwrap()).sum(); // (N1 + N2 + N3)
-                                            let sum_of_weights = entry_values.iter().map(|ev| (ev.total_sample_size.unwrap() / sum_of_n) as f64).sum::<f64>(); // (W1 + W2 + W3)
+                                        if let Some((entry_key, entry_values)) = map.iter().find(|(k, v)| first_subject_nb.id == k.subject && first_object_nb.id == k.object) {
+                                            println!("entry_key: {:?}, entry_values: {:?}", entry_key, entry_values);
+
+                                            let total_sample_sizes: Vec<_> = entry_values.iter().map(|ev| ev.total_sample_size.unwrap()).collect(); // (N1 + N2 + N3)
+                                            let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
+                                            println!("total_sample_sizes: {:?}, sum_of_n: {}", total_sample_sizes, sum_of_total_sample_sizes);
+
+                                            let weights: Vec<_> = entry_values
+                                                .iter()
+                                                .map(|ev| ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64)
+                                                .collect(); // (W1 + W2 + W3)
+                                            let sum_of_weights = weights.iter().sum::<f64>(); // (W1 + W2 + W3)
+                                            println!("weights: {:?}, sum_of_weights: {}", weights, sum_of_weights);
+
                                             let score_numerator = entry_values
                                                 .iter()
-                                                .map(|ev| (ev.total_sample_size.unwrap() / sum_of_n) as f64 * ev.log_odds_ratio.unwrap())
+                                                .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
                                                 .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
+                                            println!("score_numerator: {:?}", score_numerator);
+
+                                            let score = score_numerator / sum_of_weights;
+                                            println!("score: {:?}", score);
 
                                             // if first_object_nb.id == "RXCUI:205532" && first_subject_nb.id == "MONDO:0009061" {
                                             //     println!(
@@ -602,14 +618,13 @@ mod test {
                                             //         sum_of_n, sum_of_weights, score_numerator, entry_values
                                             //     );
                                             // }
-                                            entry_values.iter().for_each(|ev| {
-                                                let mut edge_binding_map = HashMap::new();
-                                                edge_binding_map.insert(qg_key.clone(), vec![EdgeBinding::new(ev.knowledge_graph_key.parse().unwrap())]);
-                                                let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
-                                                analysis.score = Some(score_numerator / sum_of_weights);
-                                                analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
-                                                r.analyses.push(analysis);
-                                            });
+                                            let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
+                                            let mut edge_binding_map = HashMap::new();
+                                            edge_binding_map.insert(qg_key.clone(), kg_edge_keys);
+                                            let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
+                                            analysis.score = Some(score_numerator / sum_of_weights);
+                                            analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
+                                            r.analyses.push(analysis);
                                         }
                                     }
                                 }
