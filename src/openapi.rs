@@ -66,16 +66,6 @@ pub fn custom_openapi_spec() -> OpenApi {
         components: None,
         security: vec![],
         tags: vec![],
-        // tags: vec![
-        //     Tag {
-        //         name: "translator".to_owned(),
-        //         ..Default::default()
-        //     },
-        //     Tag {
-        //         name: "trapi".to_owned(),
-        //         ..Default::default()
-        //     },
-        // ],
         external_docs: None,
         extensions: {
             let raw_extensions = r#"{
