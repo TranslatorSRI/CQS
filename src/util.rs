@@ -1,7 +1,5 @@
 use crate::model::{Analysis, Attribute, CQSCompositeScoreKey, CQSCompositeScoreValue, EdgeBinding, Query};
-use serde_json::Value;
 use std::collections::HashMap;
-use std::error;
 
 pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
     let mut map = HashMap::new();
@@ -14,7 +12,7 @@ pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQS
             {
                 let map_key = CQSCompositeScoreKey {
                     subject: kg_edge.subject.clone(),
-                    predicate: kg_edge.predicate.clone(),
+                    // predicate: kg_edge.predicate.clone(),
                     object: kg_edge.object.clone(),
                 };
 
@@ -125,26 +123,38 @@ pub fn calculate_composite_score(mut query: Query, node_binding_to_log_odds_map:
                 None => {}
                 Some(results) => {
                     results.iter_mut().for_each(|r| {
+                        r.analyses.clear();
                         if let (Some(subject_nb), Some(object_nb)) = (r.node_bindings.get(subject), r.node_bindings.get(object)) {
                             if let (Some(first_subject_nb), Some(first_object_nb)) = (subject_nb.iter().next(), object_nb.iter().next()) {
                                 if let Some((_entry_key, entry_values)) = node_binding_to_log_odds_map
                                     .iter()
                                     .find(|(k, _v)| first_subject_nb.id == k.subject && first_object_nb.id == k.object)
                                 {
-                                    let sum_of_n: i64 = entry_values.iter().map(|a| a.total_sample_size.unwrap()).sum(); // (N1 + N2 + N3)
-                                    let sum_of_weights = entry_values.iter().map(|ev| (ev.total_sample_size.unwrap() / sum_of_n) as f64).sum::<f64>(); // (W1 + W2 + W3)
+                                    // r.analyses.clear();
+                                    let total_sample_sizes: Vec<_> = entry_values.iter().map(|ev| ev.total_sample_size.unwrap()).collect();
+                                    let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
+
+                                    let weights: Vec<_> = entry_values
+                                        .iter()
+                                        .map(|ev| ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64)
+                                        .collect();
+                                    let sum_of_weights = weights.iter().sum::<f64>(); // (W1 + W2 + W3)
+
                                     let score_numerator = entry_values
                                         .iter()
-                                        .map(|ev| (ev.total_sample_size.unwrap() / sum_of_n) as f64 * ev.log_odds_ratio.unwrap())
+                                        .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
                                         .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
-                                    entry_values.iter().for_each(|ev| {
-                                        let mut edge_binding_map = HashMap::new();
-                                        edge_binding_map.insert(qg_key.clone(), vec![EdgeBinding::new(ev.knowledge_graph_key.parse().unwrap())]);
-                                        let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
-                                        analysis.score = Some(score_numerator / sum_of_weights);
-                                        analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
-                                        r.analyses.push(analysis);
-                                    });
+
+                                    let score = score_numerator / sum_of_weights;
+
+                                    let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
+
+                                    let mut edge_binding_map = HashMap::new();
+                                    edge_binding_map.insert(qg_key.clone(), kg_edge_keys);
+                                    let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
+                                    analysis.score = Some(score);
+                                    analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
+                                    r.analyses.push(analysis);
                                 }
                             }
                         }
@@ -181,29 +191,6 @@ pub fn merge_query_responses(query: &mut Query, responses: Vec<Query>) {
             }
         }
     });
-
-    // if let Some(ref mut results) = query.message.results {
-    //     let tc = (0..results.len()).tuple_combinations::<(usize, usize)>();
-    //     for (a, b) in tc {
-    //         if let Ok([result_a, result_b]) = results.get_many_mut([a, b]) {
-    //             if result_a.node_bindings == result_b.node_bindings {
-    // for (asdf_edge_key, asdf_edge_value) in result_a.analyses.edge_bindings.iter_mut() {
-    //     if let Some(qwer_edge_value) = result_b.edge_bindings.get_mut(asdf_edge_key) {
-    //         let mut set = asdf_edge_value.clone();
-    //         qwer_edge_value.iter().for_each(|a| {
-    //             if !set.contains(a) {
-    //                 set.push(a.clone());
-    //             }
-    //         });
-    //         *asdf_edge_value = set.clone();
-    //         *qwer_edge_value = set.clone();
-    //     }
-    // }
-    //             }
-    //         }
-    //     }
-    //     results.dedup();
-    // }
 }
 
 #[cfg(test)]
