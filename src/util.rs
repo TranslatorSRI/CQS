@@ -1,4 +1,5 @@
 use crate::model::{Analysis, Attribute, CQSCompositeScoreKey, CQSCompositeScoreValue, EdgeBinding, Query};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
@@ -10,6 +11,8 @@ pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQS
                 .iter()
                 .find(|a| a.resource_id.contains("infores:cohd") || a.resource_id.contains("infores:automat-icees-kg"))
             {
+                let mut value = CQSCompositeScoreValue::new(source.resource_id.to_string(), kg_key.to_string());
+
                 let map_key = CQSCompositeScoreKey {
                     subject: kg_edge.subject.clone(),
                     // predicate: kg_edge.predicate.clone(),
@@ -38,25 +41,22 @@ pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQS
                                         (Some(log_odds_ratio_attribute), Some(total_sample_size_attribute)) => {
                                             match (log_odds_ratio_attribute.value.as_f64(), total_sample_size_attribute.value.as_i64()) {
                                                 (Some(log_odds_ratio_value), Some(total_sample_size_value)) => {
-                                                    map.entry(map_key).or_insert(Vec::new()).push(CQSCompositeScoreValue {
-                                                        resource_id: source.resource_id.to_string(),
-                                                        knowledge_graph_key: kg_key.to_string(),
-                                                        log_odds_ratio: Some(log_odds_ratio_value),
-                                                        total_sample_size: Some(total_sample_size_value),
-                                                    });
+                                                    value.log_odds_ratio = Some(log_odds_ratio_value);
+                                                    value.total_sample_size = Some(total_sample_size_value as i64);
+                                                    map.entry(map_key).or_insert(Vec::new()).push(value);
                                                 }
-                                                (None, Some(_)) => {
-                                                    warn!("no log_odds_ratio, yes total_sample_size: {:?}", map_key);
-                                                }
-                                                (Some(_), None) => {
-                                                    warn!("yes log_odds_ratio, no total_sample_size: {:?}", map_key);
-                                                }
-                                                (None, None) => {
-                                                    warn!("no log_odds_ratio, no total_sample_size: {:?}", map_key);
+                                                (_, _) => {
+                                                    value.log_odds_ratio = Some(0.01);
+                                                    value.total_sample_size = Some(0);
+                                                    map.entry(map_key).or_insert(Vec::new()).push(value);
                                                 }
                                             }
                                         }
-                                        _ => {}
+                                        (_, _) => {
+                                            value.log_odds_ratio = Some(0.01);
+                                            value.total_sample_size = Some(0);
+                                            map.entry(map_key).or_insert(Vec::new()).push(value);
+                                        }
                                     }
                                 }
                             }
@@ -76,25 +76,22 @@ pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQS
                                 (Some(log_odds_ratio_attribute), Some(total_sample_size_attribute)) => {
                                     match (log_odds_ratio_attribute.value.as_f64(), total_sample_size_attribute.value.as_f64()) {
                                         (Some(log_odds_ratio_value), Some(total_sample_size_value)) => {
-                                            map.entry(map_key).or_insert(Vec::new()).push(CQSCompositeScoreValue {
-                                                resource_id: source.resource_id.to_string(),
-                                                knowledge_graph_key: kg_key.to_string(),
-                                                log_odds_ratio: Some(log_odds_ratio_value),
-                                                total_sample_size: Some(total_sample_size_value as i64),
-                                            });
+                                            value.log_odds_ratio = Some(log_odds_ratio_value);
+                                            value.total_sample_size = Some(total_sample_size_value as i64);
+                                            map.entry(map_key).or_insert(Vec::new()).push(value);
                                         }
-                                        (None, Some(_)) => {
-                                            warn!("no log_odds_ratio, yes total_sample_size: {:?}", map_key);
-                                        }
-                                        (Some(_), None) => {
-                                            warn!("yes log_odds_ratio, no total_sample_size: {:?}", map_key);
-                                        }
-                                        (None, None) => {
-                                            warn!("no log_odds_ratio, no total_sample_size: {:?}", map_key);
+                                        (_, _) => {
+                                            value.log_odds_ratio = Some(0.01);
+                                            value.total_sample_size = Some(0);
+                                            map.entry(map_key).or_insert(Vec::new()).push(value);
                                         }
                                     }
                                 }
-                                _ => {}
+                                (_, _) => {
+                                    value.log_odds_ratio = Some(0.01);
+                                    value.total_sample_size = Some(0);
+                                    map.entry(map_key).or_insert(Vec::new()).push(value);
+                                }
                             }
                         }
                     }
@@ -106,13 +103,7 @@ pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQS
     map
 }
 
-pub fn build_name_resovler_map(query: &mut Query) -> HashMap<String, Vec<String>> {
-    let map = HashMap::new();
-    // TODO not yet implemented
-    map
-}
-
-pub fn calculate_composite_score(mut query: Query, node_binding_to_log_odds_map: HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>>) -> Query {
+pub fn add_composite_score_attributes(mut query: Query, node_binding_to_log_odds_map: HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>>) -> Query {
     if let Some(query_graph) = &query.message.query_graph {
         //this should be a one-hop query so assume only one entry
         if let Some((qg_key, qg_edge)) = query_graph.edges.iter().next() {
@@ -126,38 +117,60 @@ pub fn calculate_composite_score(mut query: Query, node_binding_to_log_odds_map:
                         r.analyses.clear();
                         if let (Some(subject_nb), Some(object_nb)) = (r.node_bindings.get(subject), r.node_bindings.get(object)) {
                             if let (Some(first_subject_nb), Some(first_object_nb)) = (subject_nb.iter().next(), object_nb.iter().next()) {
-                                if let Some((_entry_key, entry_values)) = node_binding_to_log_odds_map
-                                    .iter()
-                                    .find(|(k, _v)| first_subject_nb.id == k.subject && first_object_nb.id == k.object)
-                                {
-                                    // r.analyses.clear();
-                                    let total_sample_sizes: Vec<_> = entry_values.iter().map(|ev| ev.total_sample_size.unwrap()).collect();
-                                    let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
+                                let entry_key_searchable = CQSCompositeScoreKey::new(first_subject_nb.id.to_string(), first_object_nb.id.to_string());
+                                let entry = node_binding_to_log_odds_map.iter().find(|(k, _v)| **k == entry_key_searchable);
+                                match entry {
+                                    Some((_entry_key, entry_values)) => {
+                                        let score = compute_composite_score(entry_values);
+                                        let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
+                                        let mut edge_binding_map = HashMap::new();
+                                        edge_binding_map.insert(qg_key.clone(), kg_edge_keys);
+                                        let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
+                                        analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
+                                        if score.is_nan() {
+                                            analysis.score = Some(0.01_f64.atan() * 2.0 / std::f64::consts::PI);
+                                        } else {
+                                            analysis.score = Some(score.atan() * 2.0 / std::f64::consts::PI);
+                                        }
+                                        debug!("analysis: {:?}", analysis);
+                                        r.analyses.push(analysis);
+                                    }
+                                    _ => {
+                                        let entry = node_binding_to_log_odds_map
+                                            .iter()
+                                            .find(|(k, _v)| **k == CQSCompositeScoreKey::new(first_object_nb.id.to_string(), first_subject_nb.id.to_string()));
 
-                                    let weights: Vec<_> = entry_values
-                                        .iter()
-                                        .map(|ev| ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64)
-                                        .collect();
-                                    let sum_of_weights = weights.iter().sum::<f64>(); // (W1 + W2 + W3)
-
-                                    let score_numerator = entry_values
-                                        .iter()
-                                        .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
-                                        .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
-
-                                    let score = score_numerator / sum_of_weights;
-
-                                    let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
-
-                                    let mut edge_binding_map = HashMap::new();
-                                    edge_binding_map.insert(qg_key.clone(), kg_edge_keys);
-                                    let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
-                                    analysis.score = Some(score);
-                                    analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
-                                    r.analyses.push(analysis);
+                                        if let Some((_entry_key, entry_values)) = entry {
+                                            let score = compute_composite_score(entry_values);
+                                            let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
+                                            let mut analysis = Analysis::new("infores:cqs".into(), HashMap::from([(qg_key.clone(), kg_edge_keys)]));
+                                            analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
+                                            if score.is_nan() {
+                                                analysis.score = Some(0.01_f64.atan() * 2.0 / std::f64::consts::PI);
+                                            } else {
+                                                analysis.score = Some(score.atan() * 2.0 / std::f64::consts::PI);
+                                            }
+                                            debug!("analysis: {:?}", analysis);
+                                            r.analyses.push(analysis);
+                                        }
+                                    }
                                 }
                             }
                         }
+                    });
+                    results.sort_by(|a, b| {
+                        if let (Some(a_analysis), Some(b_analysis)) = (a.analyses.iter().next(), b.analyses.iter().next()) {
+                            if let (Some(a_score), Some(b_score)) = (a_analysis.score, b_analysis.score) {
+                                return if b_score < a_score {
+                                    Ordering::Less
+                                } else if b_score > a_score {
+                                    Ordering::Greater
+                                } else {
+                                    b_score.partial_cmp(&a_score).unwrap_or(Ordering::Equal)
+                                };
+                            }
+                        }
+                        return Ordering::Less;
                     });
                 }
             }
@@ -165,6 +178,26 @@ pub fn calculate_composite_score(mut query: Query, node_binding_to_log_odds_map:
     }
 
     query
+}
+
+fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f64 {
+    let total_sample_sizes: Vec<_> = entry_values.iter().filter_map(|ev| ev.total_sample_size).collect();
+    let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
+
+    let weights: Vec<_> = entry_values
+        .iter()
+        // .filter(|ev| ev.total_sample_size.is_some())
+        .map(|ev| ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64)
+        .collect();
+    let sum_of_weights = weights.iter().sum::<f64>(); // (W1 + W2 + W3)
+
+    let score_numerator = entry_values
+        .iter()
+        // .filter(|ev| ev.total_sample_size.is_some())
+        .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
+        .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
+
+    score_numerator / sum_of_weights
 }
 
 pub fn merge_query_responses(query: &mut Query, responses: Vec<Query>) {
