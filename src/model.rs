@@ -410,6 +410,12 @@ pub struct CQSCompositeScoreKey {
     pub object: String,
 }
 
+impl CQSCompositeScoreKey {
+    pub fn new(subject: String, object: String) -> CQSCompositeScoreKey {
+        CQSCompositeScoreKey { subject, object }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct CQSCompositeScoreValue {
     pub resource_id: String,
@@ -418,15 +424,28 @@ pub struct CQSCompositeScoreValue {
     pub total_sample_size: Option<i64>,
 }
 
+impl CQSCompositeScoreValue {
+    pub fn new(resource_id: String, knowledge_graph_key: String) -> CQSCompositeScoreValue {
+        CQSCompositeScoreValue {
+            resource_id,
+            knowledge_graph_key,
+            log_odds_ratio: None,
+            total_sample_size: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::model::{Analysis, Attribute, EdgeBinding, Message, NodeBinding, Query, ResourceRoleEnum, CURIE};
+    use crate::model::{Analysis, Attribute, CQSCompositeScoreKey, CQSCompositeScoreValue, EdgeBinding, Message, NodeBinding, Query, ResourceRoleEnum, CURIE};
     use crate::util;
     use itertools::{all, Itertools};
     use serde::Deserializer;
     use serde_json::{Result, Value};
+    use std::cmp::Ordering;
     use std::collections::HashMap;
     use std::fs;
+    use std::num::FpCategory::Nan;
 
     #[test]
     #[ignore]
@@ -553,9 +572,22 @@ mod test {
     }
 
     #[test]
+    #[ignore]
+    fn test_build_node_binding_to_log_odds_data_map() {
+        let data = fs::read_to_string("/tmp/asdf.pretty.json").unwrap();
+        let potential_query: Result<Query> = serde_json::from_str(data.as_str());
+        if let Some(mut query) = potential_query.ok() {
+            let mut map = util::build_node_binding_to_log_odds_data_map(&mut query);
+            map.iter().for_each(|(k, v)| println!("k: {:?}, values: {:?}", k, v));
+        }
+        assert!(true);
+    }
+
+    #[test]
+    // #[ignore]
     fn composite_score() {
         // let data = fs::read_to_string("/tmp/message.pretty.json").unwrap();
-        let data = fs::read_to_string("/tmp/sample_input.pretty.json").unwrap();
+        let data = fs::read_to_string("/tmp/asdf.pretty.json").unwrap();
         // let data = fs::read_to_string("/tmp/response_1683229618787.json").unwrap();
         let potential_query: Result<Query> = serde_json::from_str(data.as_str());
         if let Some(mut query) = potential_query.ok() {
@@ -581,53 +613,116 @@ mod test {
                 if let Some((qg_key, qg_edge)) = query_graph.edges.iter().next() {
                     let subject = qg_edge.subject.as_str(); // something like 'n0'
                     let object = qg_edge.object.as_str(); // something like 'n1'
+                    println!("subject: {:?}, object: {:?}", subject, object);
 
                     match &mut query.message.results {
                         None => {}
                         Some(results) => {
                             results.iter_mut().for_each(|r| {
-                                // r.analyses.clear();
+                                r.analyses.clear();
                                 if let (Some(subject_nb), Some(object_nb)) = (r.node_bindings.get(subject), r.node_bindings.get(object)) {
                                     if let (Some(first_subject_nb), Some(first_object_nb)) = (subject_nb.iter().next(), object_nb.iter().next()) {
-                                        if let Some((entry_key, entry_values)) = map.iter().find(|(k, v)| first_subject_nb.id == k.subject && first_object_nb.id == k.object) {
-                                            println!("entry_key: {:?}, entry_values: {:?}", entry_key, entry_values);
+                                        let entry_key_searchable = CQSCompositeScoreKey::new(first_subject_nb.id.to_string(), first_object_nb.id.to_string());
+                                        let entry = map.iter().find(|(k, v)| **k == entry_key_searchable);
+                                        match entry {
+                                            Some((entry_key, entry_values)) => {
+                                                println!("entry_key: {:?}, entry_values: {:?}", entry_key, entry_values);
+                                                let total_sample_sizes: Vec<_> = entry_values.iter().filter_map(|ev| ev.total_sample_size).collect();
+                                                let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
+                                                println!("total_sample_sizes: {:?}, sum_of_n: {}", total_sample_sizes, sum_of_total_sample_sizes);
 
-                                            let total_sample_sizes: Vec<_> = entry_values.iter().map(|ev| ev.total_sample_size.unwrap()).collect(); // (N1 + N2 + N3)
-                                            let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
-                                            println!("total_sample_sizes: {:?}, sum_of_n: {}", total_sample_sizes, sum_of_total_sample_sizes);
+                                                let weights: Vec<_> = entry_values
+                                                    .iter()
+                                                    .map(|ev| ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64)
+                                                    .collect();
+                                                let sum_of_weights = weights.iter().sum::<f64>(); // (W1 + W2 + W3)
+                                                println!("weights: {:?}, sum_of_weights: {}", weights, sum_of_weights);
 
-                                            let weights: Vec<_> = entry_values
-                                                .iter()
-                                                .map(|ev| ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64)
-                                                .collect(); // (W1 + W2 + W3)
-                                            let sum_of_weights = weights.iter().sum::<f64>(); // (W1 + W2 + W3)
-                                            println!("weights: {:?}, sum_of_weights: {}", weights, sum_of_weights);
+                                                let score_numerator = entry_values
+                                                    .iter()
+                                                    .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
+                                                    .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
+                                                println!("score_numerator: {:?}", score_numerator);
 
-                                            let score_numerator = entry_values
-                                                .iter()
-                                                .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
-                                                .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
-                                            println!("score_numerator: {:?}", score_numerator);
+                                                let score = score_numerator / sum_of_weights;
+                                                println!("score: {:?}", score);
 
-                                            let score = score_numerator / sum_of_weights;
-                                            println!("score: {:?}", score);
+                                                // if first_object_nb.id == "RXCUI:205532" && first_subject_nb.id == "MONDO:0009061" {
+                                                //     println!(
+                                                //         "sum_of_n: {}, sum_of_weights: {}, score_numerator: {}, entry_values: {:?}",
+                                                //         sum_of_n, sum_of_weights, score_numerator, entry_values
+                                                //     );
+                                                // }
 
-                                            // if first_object_nb.id == "RXCUI:205532" && first_subject_nb.id == "MONDO:0009061" {
-                                            //     println!(
-                                            //         "sum_of_n: {}, sum_of_weights: {}, score_numerator: {}, entry_values: {:?}",
-                                            //         sum_of_n, sum_of_weights, score_numerator, entry_values
-                                            //     );
-                                            // }
-                                            let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
-                                            let mut edge_binding_map = HashMap::new();
-                                            edge_binding_map.insert(qg_key.clone(), kg_edge_keys);
-                                            let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
-                                            analysis.score = Some(score_numerator / sum_of_weights);
-                                            analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
-                                            r.analyses.push(analysis);
+                                                let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
+                                                let mut analysis = Analysis::new("infores:cqs".into(), HashMap::from([(qg_key.clone(), kg_edge_keys)]));
+                                                analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
+                                                if score.is_nan() {
+                                                    analysis.score = Some(0.01_f64.atan() * 2.0 / std::f64::consts::PI);
+                                                } else {
+                                                    analysis.score = Some(score.atan() * 2.0 / std::f64::consts::PI);
+                                                }
+                                                println!("analysis: {:?}", analysis);
+                                                r.analyses.push(analysis);
+                                            }
+                                            _ => {
+                                                println!("KEY NOT FOUND: {:?}", entry_key_searchable);
+                                                let entry = map
+                                                    .iter()
+                                                    .find(|(k, v)| **k == CQSCompositeScoreKey::new(first_object_nb.id.to_string(), first_subject_nb.id.to_string()));
+
+                                                if let Some((entry_key, entry_values)) = entry {
+                                                    println!("entry_key: {:?}, entry_values: {:?}", entry_key, entry_values);
+                                                    let total_sample_sizes: Vec<_> = entry_values.iter().filter_map(|ev| ev.total_sample_size).collect();
+                                                    let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
+                                                    println!("total_sample_sizes: {:?}, sum_of_n: {}", total_sample_sizes, sum_of_total_sample_sizes);
+
+                                                    let weights: Vec<_> = entry_values
+                                                        .iter()
+                                                        .map(|ev| ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64)
+                                                        .collect();
+                                                    let sum_of_weights = weights.iter().sum::<f64>(); // (W1 + W2 + W3)
+                                                    println!("weights: {:?}, sum_of_weights: {}", weights, sum_of_weights);
+
+                                                    let score_numerator = entry_values
+                                                        .iter()
+                                                        .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
+                                                        .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
+                                                    println!("score_numerator: {:?}", score_numerator);
+
+                                                    let score = score_numerator / sum_of_weights;
+                                                    println!("score: {:?}", score);
+
+                                                    let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
+                                                    let mut analysis = Analysis::new("infores:cqs".into(), HashMap::from([(qg_key.clone(), kg_edge_keys)]));
+                                                    analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
+                                                    if score.is_nan() {
+                                                        analysis.score = Some(0.01_f64.atan() * 2.0 / std::f64::consts::PI);
+                                                    } else {
+                                                        analysis.score = Some(score.atan() * 2.0 / std::f64::consts::PI);
+                                                    }
+                                                    println!("analysis: {:?}", analysis);
+                                                    r.analyses.push(analysis);
+                                                }
+                                            }
                                         }
                                     }
                                 }
+                            });
+
+                            results.sort_by(|a, b| {
+                                if let (Some(a_analysis), Some(b_analysis)) = (a.analyses.iter().next(), b.analyses.iter().next()) {
+                                    if let (Some(a_score), Some(b_score)) = (a_analysis.score, b_analysis.score) {
+                                        return if b_score < a_score {
+                                            Ordering::Less
+                                        } else if b_score > a_score {
+                                            Ordering::Greater
+                                        } else {
+                                            b_score.partial_cmp(&a_score).unwrap_or(Ordering::Equal)
+                                        };
+                                    }
+                                }
+                                return Ordering::Less;
                             });
                         }
                     }
@@ -648,7 +743,7 @@ mod test {
     }
 
     #[test]
-    // #[ignore]
+    #[ignore]
     fn scratch() {
         let data = fs::read_to_string("/tmp/asdf.pretty.json").unwrap();
         // let data = fs::read_to_string("/tmp/scratch-icees.json").unwrap();
