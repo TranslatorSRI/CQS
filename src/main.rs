@@ -14,6 +14,7 @@ use rocket::serde::{json::Json, Deserialize};
 use rocket::{Build, Rocket, State};
 use rocket_okapi::okapi::openapi3::*;
 use rocket_okapi::{mount_endpoints_and_merged_docs, openapi, openapi_get_routes_spec, swagger_ui::*};
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fs;
 
@@ -26,7 +27,6 @@ mod util;
 struct CQSConfig {
     path_whitelist: Vec<String>,
     workflow_runner_url: String,
-    name_resolver_url: String,
 }
 
 #[openapi]
@@ -34,7 +34,6 @@ struct CQSConfig {
 async fn query(data: Json<Query>, config: &State<CQSConfig>) -> Json<Query> {
     // info!("{:?}", config);
     let workflow_runner_url = format!("{}/query", &config.workflow_runner_url);
-    let name_resolver_url = format!("{}/reverse_lookup", &config.name_resolver_url);
     let whitelisted_paths = &config.path_whitelist;
 
     let mut query: Query = data.into_inner();
@@ -75,12 +74,10 @@ async fn query(data: Json<Query>, config: &State<CQSConfig>) -> Json<Query> {
         debug!("kg.edges.len(): {}", kg.edges.len());
     }
 
-    // let curie_to_resolved_names_map = util::build_name_resovler_map(&mut query);
-
     let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&mut query);
     debug!("node_binding_to_log_odds_map.len(): {}", node_binding_to_log_odds_map.len());
 
-    let query = util::calculate_composite_score(query, node_binding_to_log_odds_map);
+    let mut query = util::add_composite_score_attributes(query, node_binding_to_log_odds_map);
 
     Json(query)
 }
@@ -105,7 +102,7 @@ async fn post_to_workflow_runner(path: &str, curie_token: &str, workflow_runner_
     while let Some(chunk) = response.body_mut().data().await {
         response_data.push_str(std::str::from_utf8(&*chunk?)?);
     }
-    fs::write("/tmp/asdf.json", response_data.as_str()).expect("could not write data");
+    // fs::write("/tmp/asdf.json", response_data.as_str()).expect("could not write data");
     let query = serde_json::from_str(response_data.as_str()).expect("could not parse Query");
     Ok(query)
 }
