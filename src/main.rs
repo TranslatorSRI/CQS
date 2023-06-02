@@ -14,7 +14,6 @@ use rocket::serde::{json::Json, Deserialize};
 use rocket::{Build, Rocket, State};
 use rocket_okapi::okapi::openapi3::*;
 use rocket_okapi::{mount_endpoints_and_merged_docs, openapi, openapi_get_routes_spec, swagger_ui::*};
-use std::cmp::Ordering;
 use std::error::Error;
 use std::fs;
 
@@ -77,7 +76,7 @@ async fn query(data: Json<Query>, config: &State<CQSConfig>) -> Json<Query> {
     let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&mut query);
     debug!("node_binding_to_log_odds_map.len(): {}", node_binding_to_log_odds_map.len());
 
-    let mut query = util::add_composite_score_attributes(query, node_binding_to_log_odds_map);
+    let query = util::add_composite_score_attributes(query, node_binding_to_log_odds_map);
 
     Json(query)
 }
