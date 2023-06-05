@@ -9,11 +9,7 @@
                 "e0": {
                     "subject": "n0",
                     "object": "n1",
-                    "predicates": [
-                        "biolink:correlated_with",
-                        "biolink:associated_with_increased_likelihood_of",
-                        "biolink:associated_with_decreased_likelihood_of"
-                    ]
+                    "predicates": [ "biolink:correlated_with", "biolink:associated_with" ]
                 }
             }
         }
