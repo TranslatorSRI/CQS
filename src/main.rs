@@ -49,6 +49,7 @@ async fn query(data: Json<Query>, config: &State<CQSConfig>) -> Json<Query> {
         }) {
             if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
                 if let Some(ids) = &node_value.ids {
+                    info!("ids: {:?}", ids);
                     let curie_token = format!("\"{}\"", ids.clone().into_iter().join("\",\""));
                     let future_responses: Vec<_> = whitelisted_paths
                         .iter()

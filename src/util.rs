@@ -108,10 +108,10 @@ pub fn add_composite_score_attributes(mut query: Query, node_binding_to_log_odds
             match &mut query.message.results {
                 None => {}
                 Some(results) => {
-                    // little bit of cleaning
+                    debug!("clearing out analyses");
                     results.iter_mut().for_each(|r| r.analyses.clear());
 
-                    // need to sort before deduping
+                    debug!("sorting before deduping");
                     results.sort_by(|a, b| {
                         if let (Some(a_nb_subject), Some(a_nb_object), Some(b_nb_subject), Some(b_nb_object)) = (
                             a.node_bindings.get(subject),
@@ -132,6 +132,7 @@ pub fn add_composite_score_attributes(mut query: Query, node_binding_to_log_odds
                         Ordering::Less
                     });
 
+                    debug!("deduping");
                     results.dedup_by(|a, b| {
                         if let (Some(a_nb_subject), Some(a_nb_object), Some(b_nb_subject), Some(b_nb_object)) = (
                             a.node_bindings.get(subject),
@@ -150,6 +151,7 @@ pub fn add_composite_score_attributes(mut query: Query, node_binding_to_log_odds
                         return false;
                     });
 
+                    debug!("adding Analyses");
                     results.iter_mut().for_each(|r| {
                         if let (Some(subject_nb), Some(object_nb)) = (r.node_bindings.get(subject), r.node_bindings.get(object)) {
                             if let (Some(first_subject_nb), Some(first_object_nb)) = (subject_nb.iter().next(), object_nb.iter().next()) {
@@ -193,6 +195,8 @@ pub fn add_composite_score_attributes(mut query: Query, node_binding_to_log_odds
                             }
                         }
                     });
+
+                    debug!("sorting by cqs score");
                     results.sort_by(|a, b| {
                         if let (Some(a_analysis), Some(b_analysis)) = (a.analyses.iter().next(), b.analyses.iter().next()) {
                             if let (Some(a_score), Some(b_score)) = (a_analysis.score, b_analysis.score) {
