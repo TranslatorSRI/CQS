@@ -236,7 +236,8 @@ pub fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f6
         .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
         .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
 
-    score_numerator / sum_of_weights
+    let score = score_numerator / sum_of_weights;
+    score.abs()
 }
 
 pub fn merge_query_responses(query: &mut Query, responses: Vec<Query>) {
@@ -266,12 +267,13 @@ pub fn merge_query_responses(query: &mut Query, responses: Vec<Query>) {
 }
 
 #[cfg(test)]
-#[ignore]
 mod test {
-    use crate::model::Query;
+    use crate::model::{CQSCompositeScoreValue, Query};
+    use crate::util::compute_composite_score;
     use serde_json::Result;
 
     #[test]
+    #[ignore]
     fn simple_merge() {
         let data = r#"{
             "message": {
@@ -313,6 +315,36 @@ mod test {
         //     }
         // }
 
+        assert!(true);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_compute_composite_score() {
+        let values = vec![
+            CQSCompositeScoreValue {
+                resource_id: "infores:automat-icees-kg".to_string(),
+                knowledge_graph_key: "84707a7f1b70".to_string(),
+                log_odds_ratio: Some(-0.09315839547658776),
+                total_sample_size: Some(4753),
+            },
+            CQSCompositeScoreValue {
+                resource_id: "infores:automat-icees-kg".to_string(),
+                knowledge_graph_key: "7cf0de2cf152".to_string(),
+                log_odds_ratio: Some(0.2341933875007947),
+                total_sample_size: Some(1392),
+            },
+            CQSCompositeScoreValue {
+                resource_id: "infores:automat-icees-kg".to_string(),
+                knowledge_graph_key: "e34a01832e65".to_string(),
+                log_odds_ratio: Some(-0.4179196879347687),
+                total_sample_size: Some(5450),
+            },
+        ];
+
+        let score = compute_composite_score(&values);
+        let normalized_score = score.atan() * 2.0 / std::f64::consts::PI;
+        println!("score: {:?}, normalized_score: {:?}", score, normalized_score);
         assert!(true);
     }
 }
