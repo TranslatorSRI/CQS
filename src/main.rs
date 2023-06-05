@@ -4,7 +4,6 @@ extern crate rocket;
 #[macro_use]
 extern crate log;
 
-use crate::model::{KnowledgeType, Query};
 use futures::future::join_all;
 use hyper::body::HttpBody;
 use hyper_tls::HttpsConnector;
@@ -16,6 +15,7 @@ use rocket_okapi::okapi::openapi3::*;
 use rocket_okapi::{mount_endpoints_and_merged_docs, openapi, openapi_get_routes_spec, swagger_ui::*};
 use std::error::Error;
 use std::fs;
+use trapi_model_rs::{KnowledgeType, Query};
 
 mod model;
 mod openapi;
