@@ -1,6 +1,7 @@
-use crate::model::{Analysis, Attribute, CQSCompositeScoreKey, CQSCompositeScoreValue, EdgeBinding, Query};
+use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use trapi_model_rs::{Analysis, Attribute, EdgeBinding, Query};
 
 pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
     let mut map = HashMap::new();
@@ -268,9 +269,14 @@ pub fn merge_query_responses(query: &mut Query, responses: Vec<Query>) {
 
 #[cfg(test)]
 mod test {
-    use crate::model::{CQSCompositeScoreValue, Query};
-    use crate::util::compute_composite_score;
+    use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue, Query};
+    use crate::util;
+    use crate::util::{build_node_binding_to_log_odds_data_map, compute_composite_score};
     use serde_json::Result;
+    use std::cmp::Ordering;
+    use std::collections::HashMap;
+    use std::fs;
+    use trapi_model_rs::{Analysis, EdgeBinding, Query};
 
     #[test]
     #[ignore]
@@ -346,5 +352,176 @@ mod test {
         let normalized_score = score.atan() * 2.0 / std::f64::consts::PI;
         println!("score: {:?}, normalized_score: {:?}", score, normalized_score);
         assert!(true);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_build_node_binding_to_log_odds_data_map() {
+        let data = fs::read_to_string("/tmp/asdf.pretty.json").unwrap();
+        let potential_query: Result<Query> = serde_json::from_str(data.as_str());
+        if let Some(mut query) = potential_query.ok() {
+            let mut map = build_node_binding_to_log_odds_data_map(&mut query);
+            map.iter().for_each(|(k, v)| println!("k: {:?}, values: {:?}", k, v));
+        }
+        assert!(true);
+    }
+
+    #[test]
+    // #[ignore]
+    fn composite_score() {
+        // let data = fs::read_to_string("/tmp/message.pretty.json").unwrap();
+        let data = fs::read_to_string("/tmp/asdf.pretty.json").unwrap();
+        // let data = fs::read_to_string("/tmp/response_1683229618787.json").unwrap();
+        let potential_query: Result<Query> = serde_json::from_str(data.as_str());
+        if let Some(mut query) = potential_query.ok() {
+            let mut map = build_node_binding_to_log_odds_data_map(&mut query);
+            // map.iter().for_each(|(k, v)| println!("k: {:?}, values: {:?}", k, v));
+
+            // icees-kg: log_odds_ratio = OR1
+            // total_sample_size =  N1
+            // weight = W1 = N1/(N1 + N2 + N3)
+            //
+            // cohd: log_odds_ratio = OR2
+            // total_sample_size =  N2
+            // weight = W2 = N2/(N1 + N2 + N3)
+            //
+            // multiomics-ehr-risk-provider: log_odds_ratio = OR3
+            // total_sample_size =  N3
+            // weight = W3  = N3/(N1 + N2 + N3)
+            //
+            // Score = (W1 * OR1 + W2 * OR2 + W3 * OR3) / (W1 + W2 + W3)
+
+            if let Some(query_graph) = &query.message.query_graph {
+                //this should be a one-hop query so assume only one entry
+                if let Some((qg_key, qg_edge)) = query_graph.edges.iter().next() {
+                    let subject = qg_edge.subject.as_str(); // something like 'n0'
+                    let object = qg_edge.object.as_str(); // something like 'n1'
+                    println!("subject: {:?}, object: {:?}", subject, object);
+
+                    match &mut query.message.results {
+                        None => {}
+                        Some(results) => {
+                            results.iter_mut().for_each(|r| r.analyses.clear());
+
+                            results.sort_by(|a, b| {
+                                if let (Some(a_nb_subject), Some(a_nb_object), Some(b_nb_subject), Some(b_nb_object)) = (
+                                    a.node_bindings.get(subject),
+                                    a.node_bindings.get(object),
+                                    b.node_bindings.get(subject),
+                                    b.node_bindings.get(object),
+                                ) {
+                                    return if let (Some(a_nb_subject_first), Some(a_nb_object_first), Some(b_nb_subject_first), Some(b_nb_object_first)) =
+                                        (a_nb_subject.iter().next(), a_nb_object.iter().next(), b_nb_subject.iter().next(), b_nb_object.iter().next())
+                                    {
+                                        (a_nb_subject_first.id.to_string(), a_nb_object_first.id.to_string())
+                                            .partial_cmp(&(b_nb_subject_first.id.to_string(), b_nb_object_first.id.to_string()))
+                                            .unwrap_or(Ordering::Less)
+                                    } else {
+                                        Ordering::Less
+                                    };
+                                }
+                                Ordering::Less
+                            });
+
+                            results.dedup_by(|a, b| {
+                                if let (Some(a_nb_subject), Some(a_nb_object), Some(b_nb_subject), Some(b_nb_object)) = (
+                                    a.node_bindings.get(subject),
+                                    a.node_bindings.get(object),
+                                    b.node_bindings.get(subject),
+                                    b.node_bindings.get(object),
+                                ) {
+                                    return if let (Some(a_nb_subject_first), Some(a_nb_object_first), Some(b_nb_subject_first), Some(b_nb_object_first)) =
+                                        (a_nb_subject.iter().next(), a_nb_object.iter().next(), b_nb_subject.iter().next(), b_nb_object.iter().next())
+                                    {
+                                        a_nb_subject_first.id == b_nb_subject_first.id && a_nb_object_first.id == b_nb_object_first.id
+                                    } else {
+                                        false
+                                    };
+                                }
+                                return false;
+                            });
+                            results.iter_mut().for_each(|r| {
+                                if let (Some(subject_nb), Some(object_nb)) = (r.node_bindings.get(subject), r.node_bindings.get(object)) {
+                                    if let (Some(first_subject_nb), Some(first_object_nb)) = (subject_nb.iter().next(), object_nb.iter().next()) {
+                                        let entry_key_searchable = CQSCompositeScoreKey::new(first_subject_nb.id.to_string(), first_object_nb.id.to_string());
+                                        let entry = map.iter().find(|(k, v)| **k == entry_key_searchable);
+                                        match entry {
+                                            Some((entry_key, entry_values)) => {
+                                                println!("entry_key: {:?}, entry_values: {:?}", entry_key, entry_values);
+                                                let score = util::compute_composite_score(entry_values);
+                                                println!("score: {:?}", score);
+                                                // subject: "MONDO:0009061", object: "PUBCHEM.COMPOUND:16220172"
+                                                if first_subject_nb.id == "MONDO:0009061" && first_object_nb.id == "PUBCHEM.COMPOUND:16220172" {
+                                                    println!("GOT HERE");
+                                                }
+
+                                                let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
+                                                let mut analysis = Analysis::new("infores:cqs".into(), HashMap::from([(qg_key.clone(), kg_edge_keys)]));
+                                                analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
+                                                if score.is_nan() {
+                                                    analysis.score = Some(0.01_f64.atan() * 2.0 / std::f64::consts::PI);
+                                                } else {
+                                                    analysis.score = Some(score.atan() * 2.0 / std::f64::consts::PI);
+                                                }
+                                                println!("analysis: {:?}", analysis);
+                                                r.analyses.push(analysis);
+                                            }
+                                            _ => {
+                                                println!("KEY NOT FOUND: {:?}", entry_key_searchable);
+                                                let entry_key_inverse_searchable = CQSCompositeScoreKey::new(first_object_nb.id.to_string(), first_subject_nb.id.to_string());
+                                                let entry = map.iter().find(|(k, v)| **k == entry_key_inverse_searchable);
+
+                                                if let Some((entry_key, entry_values)) = entry {
+                                                    println!("entry_key: {:?}, entry_values: {:?}", entry_key, entry_values);
+                                                    let score = util::compute_composite_score(entry_values);
+                                                    println!("score: {:?}", score);
+
+                                                    let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
+                                                    let mut analysis = Analysis::new("infores:cqs".into(), HashMap::from([(qg_key.clone(), kg_edge_keys)]));
+                                                    analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
+                                                    if score.is_nan() {
+                                                        analysis.score = Some(0.01_f64.atan() * 2.0 / std::f64::consts::PI);
+                                                    } else {
+                                                        analysis.score = Some(score.atan() * 2.0 / std::f64::consts::PI);
+                                                    }
+                                                    println!("analysis: {:?}", analysis);
+                                                    r.analyses.push(analysis);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+
+                            results.sort_by(|a, b| {
+                                if let (Some(a_analysis), Some(b_analysis)) = (a.analyses.iter().next(), b.analyses.iter().next()) {
+                                    if let (Some(a_score), Some(b_score)) = (a_analysis.score, b_analysis.score) {
+                                        return if b_score < a_score {
+                                            Ordering::Less
+                                        } else if b_score > a_score {
+                                            Ordering::Greater
+                                        } else {
+                                            b_score.partial_cmp(&a_score).unwrap_or(Ordering::Equal)
+                                        };
+                                    }
+                                }
+                                return Ordering::Less;
+                            });
+                        }
+                    }
+                }
+            }
+            let sample_output_result = serde_json::to_string_pretty(&query);
+            match sample_output_result {
+                Err(error) => {
+                    println!("{}", error);
+                    assert!(false);
+                }
+                Ok(sample_output) => {
+                    fs::write("/tmp/sample_output.pretty.json", sample_output).unwrap();
+                    assert!(true);
+                }
+            }
+        }
     }
 }
