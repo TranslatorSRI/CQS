@@ -11,13 +11,8 @@ pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQS
                 .iter()
                 .find(|a| a.resource_id.contains("infores:cohd") || a.resource_id.contains("infores:automat-icees-kg"))
             {
+                let map_key = CQSCompositeScoreKey::new(kg_edge.subject.to_string(), kg_edge.object.to_string());
                 let mut value = CQSCompositeScoreValue::new(source.resource_id.to_string(), kg_key.to_string());
-
-                let map_key = CQSCompositeScoreKey {
-                    subject: kg_edge.subject.clone(),
-                    // predicate: kg_edge.predicate.clone(),
-                    object: kg_edge.object.clone(),
-                };
 
                 match source.resource_id.as_str() {
                     "infores:cohd" => {
@@ -113,8 +108,49 @@ pub fn add_composite_score_attributes(mut query: Query, node_binding_to_log_odds
             match &mut query.message.results {
                 None => {}
                 Some(results) => {
+                    // little bit of cleaning
+                    results.iter_mut().for_each(|r| r.analyses.clear());
+
+                    // need to sort before deduping
+                    results.sort_by(|a, b| {
+                        if let (Some(a_nb_subject), Some(a_nb_object), Some(b_nb_subject), Some(b_nb_object)) = (
+                            a.node_bindings.get(subject),
+                            a.node_bindings.get(object),
+                            b.node_bindings.get(subject),
+                            b.node_bindings.get(object),
+                        ) {
+                            return if let (Some(a_nb_subject_first), Some(a_nb_object_first), Some(b_nb_subject_first), Some(b_nb_object_first)) =
+                                (a_nb_subject.iter().next(), a_nb_object.iter().next(), b_nb_subject.iter().next(), b_nb_object.iter().next())
+                            {
+                                (a_nb_subject_first.id.to_string(), a_nb_object_first.id.to_string())
+                                    .partial_cmp(&(b_nb_subject_first.id.to_string(), b_nb_object_first.id.to_string()))
+                                    .unwrap_or(Ordering::Less)
+                            } else {
+                                Ordering::Less
+                            };
+                        }
+                        Ordering::Less
+                    });
+
+                    results.dedup_by(|a, b| {
+                        if let (Some(a_nb_subject), Some(a_nb_object), Some(b_nb_subject), Some(b_nb_object)) = (
+                            a.node_bindings.get(subject),
+                            a.node_bindings.get(object),
+                            b.node_bindings.get(subject),
+                            b.node_bindings.get(object),
+                        ) {
+                            return if let (Some(a_nb_subject_first), Some(a_nb_object_first), Some(b_nb_subject_first), Some(b_nb_object_first)) =
+                                (a_nb_subject.iter().next(), a_nb_object.iter().next(), b_nb_subject.iter().next(), b_nb_object.iter().next())
+                            {
+                                a_nb_subject_first.id == b_nb_subject_first.id && a_nb_object_first.id == b_nb_object_first.id
+                            } else {
+                                false
+                            };
+                        }
+                        return false;
+                    });
+
                     results.iter_mut().for_each(|r| {
-                        r.analyses.clear();
                         if let (Some(subject_nb), Some(object_nb)) = (r.node_bindings.get(subject), r.node_bindings.get(object)) {
                             if let (Some(first_subject_nb), Some(first_object_nb)) = (subject_nb.iter().next(), object_nb.iter().next()) {
                                 let entry_key_searchable = CQSCompositeScoreKey::new(first_subject_nb.id.to_string(), first_object_nb.id.to_string());
@@ -136,9 +172,8 @@ pub fn add_composite_score_attributes(mut query: Query, node_binding_to_log_odds
                                         r.analyses.push(analysis);
                                     }
                                     _ => {
-                                        let entry = node_binding_to_log_odds_map
-                                            .iter()
-                                            .find(|(k, _v)| **k == CQSCompositeScoreKey::new(first_object_nb.id.to_string(), first_subject_nb.id.to_string()));
+                                        let entry_key_inverse_searchable = CQSCompositeScoreKey::new(first_object_nb.id.to_string(), first_subject_nb.id.to_string());
+                                        let entry = node_binding_to_log_odds_map.iter().find(|(k, _v)| **k == entry_key_inverse_searchable);
 
                                         if let Some((_entry_key, entry_values)) = entry {
                                             let score = compute_composite_score(entry_values);
@@ -180,7 +215,7 @@ pub fn add_composite_score_attributes(mut query: Query, node_binding_to_log_odds
     query
 }
 
-fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f64 {
+pub fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f64 {
     let total_sample_sizes: Vec<_> = entry_values.iter().filter_map(|ev| ev.total_sample_size).collect();
     let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
 

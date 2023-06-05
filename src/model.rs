@@ -618,8 +618,46 @@ mod test {
                     match &mut query.message.results {
                         None => {}
                         Some(results) => {
+                            results.iter_mut().for_each(|r| r.analyses.clear());
+
+                            results.sort_by(|a, b| {
+                                if let (Some(a_nb_subject), Some(a_nb_object), Some(b_nb_subject), Some(b_nb_object)) = (
+                                    a.node_bindings.get(subject),
+                                    a.node_bindings.get(object),
+                                    b.node_bindings.get(subject),
+                                    b.node_bindings.get(object),
+                                ) {
+                                    return if let (Some(a_nb_subject_first), Some(a_nb_object_first), Some(b_nb_subject_first), Some(b_nb_object_first)) =
+                                        (a_nb_subject.iter().next(), a_nb_object.iter().next(), b_nb_subject.iter().next(), b_nb_object.iter().next())
+                                    {
+                                        (a_nb_subject_first.id.to_string(), a_nb_object_first.id.to_string())
+                                            .partial_cmp(&(b_nb_subject_first.id.to_string(), b_nb_object_first.id.to_string()))
+                                            .unwrap_or(Ordering::Less)
+                                    } else {
+                                        Ordering::Less
+                                    };
+                                }
+                                Ordering::Less
+                            });
+
+                            results.dedup_by(|a, b| {
+                                if let (Some(a_nb_subject), Some(a_nb_object), Some(b_nb_subject), Some(b_nb_object)) = (
+                                    a.node_bindings.get(subject),
+                                    a.node_bindings.get(object),
+                                    b.node_bindings.get(subject),
+                                    b.node_bindings.get(object),
+                                ) {
+                                    return if let (Some(a_nb_subject_first), Some(a_nb_object_first), Some(b_nb_subject_first), Some(b_nb_object_first)) =
+                                        (a_nb_subject.iter().next(), a_nb_object.iter().next(), b_nb_subject.iter().next(), b_nb_object.iter().next())
+                                    {
+                                        a_nb_subject_first.id == b_nb_subject_first.id && a_nb_object_first.id == b_nb_object_first.id
+                                    } else {
+                                        false
+                                    };
+                                }
+                                return false;
+                            });
                             results.iter_mut().for_each(|r| {
-                                r.analyses.clear();
                                 if let (Some(subject_nb), Some(object_nb)) = (r.node_bindings.get(subject), r.node_bindings.get(object)) {
                                     if let (Some(first_subject_nb), Some(first_object_nb)) = (subject_nb.iter().next(), object_nb.iter().next()) {
                                         let entry_key_searchable = CQSCompositeScoreKey::new(first_subject_nb.id.to_string(), first_object_nb.id.to_string());
@@ -627,32 +665,12 @@ mod test {
                                         match entry {
                                             Some((entry_key, entry_values)) => {
                                                 println!("entry_key: {:?}, entry_values: {:?}", entry_key, entry_values);
-                                                let total_sample_sizes: Vec<_> = entry_values.iter().filter_map(|ev| ev.total_sample_size).collect();
-                                                let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
-                                                println!("total_sample_sizes: {:?}, sum_of_n: {}", total_sample_sizes, sum_of_total_sample_sizes);
-
-                                                let weights: Vec<_> = entry_values
-                                                    .iter()
-                                                    .map(|ev| ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64)
-                                                    .collect();
-                                                let sum_of_weights = weights.iter().sum::<f64>(); // (W1 + W2 + W3)
-                                                println!("weights: {:?}, sum_of_weights: {}", weights, sum_of_weights);
-
-                                                let score_numerator = entry_values
-                                                    .iter()
-                                                    .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
-                                                    .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
-                                                println!("score_numerator: {:?}", score_numerator);
-
-                                                let score = score_numerator / sum_of_weights;
+                                                let score = util::compute_composite_score(entry_values);
                                                 println!("score: {:?}", score);
-
-                                                // if first_object_nb.id == "RXCUI:205532" && first_subject_nb.id == "MONDO:0009061" {
-                                                //     println!(
-                                                //         "sum_of_n: {}, sum_of_weights: {}, score_numerator: {}, entry_values: {:?}",
-                                                //         sum_of_n, sum_of_weights, score_numerator, entry_values
-                                                //     );
-                                                // }
+                                                // subject: "MONDO:0009061", object: "PUBCHEM.COMPOUND:16220172"
+                                                if first_subject_nb.id == "MONDO:0009061" && first_object_nb.id == "PUBCHEM.COMPOUND:16220172" {
+                                                    println!("GOT HERE");
+                                                }
 
                                                 let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
                                                 let mut analysis = Analysis::new("infores:cqs".into(), HashMap::from([(qg_key.clone(), kg_edge_keys)]));
@@ -667,30 +685,12 @@ mod test {
                                             }
                                             _ => {
                                                 println!("KEY NOT FOUND: {:?}", entry_key_searchable);
-                                                let entry = map
-                                                    .iter()
-                                                    .find(|(k, v)| **k == CQSCompositeScoreKey::new(first_object_nb.id.to_string(), first_subject_nb.id.to_string()));
+                                                let entry_key_inverse_searchable = CQSCompositeScoreKey::new(first_object_nb.id.to_string(), first_subject_nb.id.to_string());
+                                                let entry = map.iter().find(|(k, v)| **k == entry_key_inverse_searchable);
 
                                                 if let Some((entry_key, entry_values)) = entry {
                                                     println!("entry_key: {:?}, entry_values: {:?}", entry_key, entry_values);
-                                                    let total_sample_sizes: Vec<_> = entry_values.iter().filter_map(|ev| ev.total_sample_size).collect();
-                                                    let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
-                                                    println!("total_sample_sizes: {:?}, sum_of_n: {}", total_sample_sizes, sum_of_total_sample_sizes);
-
-                                                    let weights: Vec<_> = entry_values
-                                                        .iter()
-                                                        .map(|ev| ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64)
-                                                        .collect();
-                                                    let sum_of_weights = weights.iter().sum::<f64>(); // (W1 + W2 + W3)
-                                                    println!("weights: {:?}, sum_of_weights: {}", weights, sum_of_weights);
-
-                                                    let score_numerator = entry_values
-                                                        .iter()
-                                                        .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
-                                                        .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
-                                                    println!("score_numerator: {:?}", score_numerator);
-
-                                                    let score = score_numerator / sum_of_weights;
+                                                    let score = util::compute_composite_score(entry_values);
                                                     println!("score: {:?}", score);
 
                                                     let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
