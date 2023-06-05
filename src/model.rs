@@ -584,7 +584,7 @@ mod test {
     }
 
     #[test]
-    // #[ignore]
+    #[ignore]
     fn composite_score() {
         // let data = fs::read_to_string("/tmp/message.pretty.json").unwrap();
         let data = fs::read_to_string("/tmp/asdf.pretty.json").unwrap();
