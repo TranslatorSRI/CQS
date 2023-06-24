@@ -1,10 +1,12 @@
 use rocket_okapi::okapi::openapi3::{Contact, Info, License, Object, OpenApi, Server};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::env;
 
 pub fn custom_openapi_spec() -> OpenApi {
     let response_url_root = env::var("RESPONSE_URL_ROOT").unwrap_or("http://localhost:8000".to_string());
+    let maturity = env::var("MATURITY").unwrap_or("development".to_string());
+    let trapi_version = env::var("SCHEMA_VERSION").unwrap_or("1.4.0".to_string());
     OpenApi {
         openapi: OpenApi::default_version(),
         info: Info {
@@ -16,12 +18,11 @@ pub fn custom_openapi_spec() -> OpenApi {
                 url: Some("https://github.com/TranslatorSRI/CQS".to_owned()),
                 email: Some("jdr0887@renci.org".to_owned()),
                 extensions: {
-                    let raw_extensions = r#"{
+                    let raw_extensions = json!({
                         "x-id": "https://github.com/jdr0887",
                         "x-role": "responsible developer"
-                    }"#;
-                    let raw_extensions_map: HashMap<String, Value> = serde_json::from_str(raw_extensions).unwrap();
-                    Object::from_iter(raw_extensions_map)
+                    });
+                    Object::from_iter(raw_extensions.as_object().unwrap().clone())
                 },
             }),
             license: Some(License {
@@ -31,36 +32,34 @@ pub fn custom_openapi_spec() -> OpenApi {
             }),
             version: env!("CARGO_PKG_VERSION").to_owned(),
             extensions: {
-                let raw_extensions = r#"{
+                let raw_extensions = json!({
                     "x-translator": {
-                        "component": "KP",
+                        "component": "ARA",
                         "team": [ "Clinical Data Provider" ],
                         "biolink-version": "3.1.2",
                         "infores": "infores:cqs"
                     },
                     "x-trapi": {
-                        "version": "1.4.0",
-                        "asyncquery": false,
+                        "version": trapi_version,
+                        "asyncquery": true,
                         "operations": [ "lookup" ],
                         "batch_size_limit": 100,
                         "rate_limit": 10
                     }
-                }"#;
-                let raw_extensions_map: HashMap<String, Value> = serde_json::from_str(raw_extensions).unwrap();
-                Object::from_iter(raw_extensions_map)
+                });
+                Object::from_iter(raw_extensions.as_object().unwrap().clone())
             },
         },
         servers: vec![Server {
             url: response_url_root,
             description: Some("development".to_owned()),
             extensions: {
-                let raw_extensions = r#"{
-                    "x-maturity": "development",
+                let raw_extensions = json!({
+                    "x-maturity": maturity,
                     "x-location": "RENCI",
-                    "x-trapi": "1.4.0"
-                }"#;
-                let raw_extensions_map: HashMap<String, Value> = serde_json::from_str(raw_extensions).unwrap();
-                Object::from_iter(raw_extensions_map)
+                    "x-trapi": trapi_version
+                });
+                Object::from_iter(raw_extensions.as_object().unwrap().clone())
             },
             ..Default::default()
         }],
@@ -70,14 +69,13 @@ pub fn custom_openapi_spec() -> OpenApi {
         tags: vec![],
         external_docs: None,
         extensions: {
-            let raw_extensions = r#"{
+            let raw_extensions = json!({
                 "tags": [
                     { "name": "translator" },
                     { "name": "trapi" }
                 ]
-            }"#;
-            let raw_extensions_map: HashMap<String, Value> = serde_json::from_str(raw_extensions).unwrap();
-            Object::from_iter(raw_extensions_map)
+            });
+            Object::from_iter(raw_extensions.as_object().unwrap().clone())
         },
     }
 }
