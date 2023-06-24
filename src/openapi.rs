@@ -1,8 +1,10 @@
 use rocket_okapi::okapi::openapi3::{Contact, Info, License, Object, OpenApi, Server};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::env;
 
 pub fn custom_openapi_spec() -> OpenApi {
+    let response_url_root = env::var("RESPONSE_URL_ROOT").unwrap_or("http://localhost:8000".to_string());
     OpenApi {
         openapi: OpenApi::default_version(),
         info: Info {
@@ -49,7 +51,7 @@ pub fn custom_openapi_spec() -> OpenApi {
             },
         },
         servers: vec![Server {
-            url: "https://cqs-dev.apps.renci.org/v0.1".to_owned(),
+            url: response_url_root,
             description: Some("development".to_owned()),
             extensions: {
                 let raw_extensions = r#"{
