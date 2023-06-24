@@ -1,12 +1,19 @@
 use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
+use itertools::Itertools;
+use merge_hashmap::Merge;
+use reqwest::redirect::Policy;
+use reqwest::{header, RequestBuilder};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use trapi_model_rs::{Analysis, Attribute, EdgeBinding, Query};
+use std::path::Path;
+use std::time::Duration;
+use std::{env, error, fs};
+use trapi_model_rs::{Analysis, AsyncQuery, Attribute, EdgeBinding, KnowledgeGraph, Message, Query, CURIE};
 
-pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
+pub fn build_node_binding_to_log_odds_data_map(knowledge_graph: &Option<KnowledgeGraph>) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
     let mut map = HashMap::new();
-    if let Some(knowledge_graph) = &query.message.knowledge_graph {
-        knowledge_graph.edges.iter().for_each(|(kg_key, kg_edge)| {
+    if let Some(kg) = knowledge_graph {
+        kg.edges.iter().for_each(|(kg_key, kg_edge)| {
             if let Some(source) = kg_edge.sources.iter().find(|a| {
                 a.resource_id.contains("infores:cohd") || a.resource_id.contains("infores:automat-icees-kg") || a.resource_id.contains("infores:biothings-multiomics-ehr-risk")
             }) {
@@ -14,48 +21,48 @@ pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQS
                 let mut value = CQSCompositeScoreValue::new(source.resource_id.to_string(), kg_key.to_string());
 
                 match source.resource_id.as_str() {
-                    "infores:cohd" => {
-                        if let Some(attributes) = &kg_edge.attributes {
-                            if let Some(log_odds_attribute) = attributes
-                                .iter()
-                                .find(|a| a.attribute_type_id == "biolink:has_supporting_study_result" && a.value_type_id == Some("biolink:LogOddsAnalysisResult".to_string()))
-                            {
-                                if let Some(second_level_attributes) = &log_odds_attribute.attributes {
-                                    let atts: Vec<_> = second_level_attributes.iter().filter_map(|a| serde_json::from_value::<Attribute>(a.clone()).ok()).collect();
-
-                                    let potential_log_odds_ratio_attribute = atts
-                                        .iter()
-                                        .find(|a| a.attribute_type_id == "biolink:log_odds_ratio" && a.original_attribute_name == Some("log_odds".to_string()));
-
-                                    let potential_total_sample_size_attribute = atts
-                                        .iter()
-                                        .find(|a| a.attribute_type_id == "biolink:total_sample_size" && a.original_attribute_name == Some("concept_pair_count".to_string()));
-
-                                    match (potential_log_odds_ratio_attribute, potential_total_sample_size_attribute) {
-                                        (Some(log_odds_ratio_attribute), Some(total_sample_size_attribute)) => {
-                                            match (log_odds_ratio_attribute.value.as_f64(), total_sample_size_attribute.value.as_i64()) {
-                                                (Some(log_odds_ratio_value), Some(total_sample_size_value)) => {
-                                                    value.log_odds_ratio = Some(log_odds_ratio_value);
-                                                    value.total_sample_size = Some(total_sample_size_value as i64);
-                                                    map.entry(map_key).or_insert(Vec::new()).push(value);
-                                                }
-                                                (_, _) => {
-                                                    value.log_odds_ratio = Some(0.01);
-                                                    value.total_sample_size = Some(0);
-                                                    map.entry(map_key).or_insert(Vec::new()).push(value);
-                                                }
-                                            }
-                                        }
-                                        (_, _) => {
-                                            value.log_odds_ratio = Some(0.01);
-                                            value.total_sample_size = Some(0);
-                                            map.entry(map_key).or_insert(Vec::new()).push(value);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    // "infores:cohd" => {
+                    //     if let Some(attributes) = &kg_edge.attributes {
+                    //         if let Some(log_odds_attribute) = attributes
+                    //             .iter()
+                    //             .find(|a| a.attribute_type_id == "biolink:has_supporting_study_result" && a.value_type_id == Some("biolink:LogOddsAnalysisResult".to_string()))
+                    //         {
+                    //             if let Some(second_level_attributes) = &log_odds_attribute.attributes {
+                    //                 let atts: Vec<_> = second_level_attributes.iter().filter_map(|a| serde_json::from_value::<Attribute>(a.clone()).ok()).collect();
+                    //
+                    //                 let potential_log_odds_ratio_attribute = atts
+                    //                     .iter()
+                    //                     .find(|a| a.attribute_type_id == "biolink:log_odds_ratio" && a.original_attribute_name == Some("log_odds".to_string()));
+                    //
+                    //                 let potential_total_sample_size_attribute = atts
+                    //                     .iter()
+                    //                     .find(|a| a.attribute_type_id == "biolink:total_sample_size" && a.original_attribute_name == Some("concept_pair_count".to_string()));
+                    //
+                    //                 match (potential_log_odds_ratio_attribute, potential_total_sample_size_attribute) {
+                    //                     (Some(log_odds_ratio_attribute), Some(total_sample_size_attribute)) => {
+                    //                         match (log_odds_ratio_attribute.value.as_f64(), total_sample_size_attribute.value.as_i64()) {
+                    //                             (Some(log_odds_ratio_value), Some(total_sample_size_value)) => {
+                    //                                 value.log_odds_ratio = Some(log_odds_ratio_value);
+                    //                                 value.total_sample_size = Some(total_sample_size_value as i64);
+                    //                                 map.entry(map_key).or_insert(Vec::new()).push(value);
+                    //                             }
+                    //                             (_, _) => {
+                    //                                 value.log_odds_ratio = Some(0.01);
+                    //                                 value.total_sample_size = Some(0);
+                    //                                 map.entry(map_key).or_insert(Vec::new()).push(value);
+                    //                             }
+                    //                         }
+                    //                     }
+                    //                     (_, _) => {
+                    //                         value.log_odds_ratio = Some(0.01);
+                    //                         value.total_sample_size = Some(0);
+                    //                         map.entry(map_key).or_insert(Vec::new()).push(value);
+                    //                     }
+                    //                 }
+                    //             }
+                    //         }
+                    //     }
+                    // }
                     "infores:automat-icees-kg" => {
                         if let Some(attributes) = &kg_edge.attributes {
                             let potential_log_odds_ratio_attribute = attributes
@@ -72,24 +79,22 @@ pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQS
                                         (Some(log_odds_ratio_value), Some(total_sample_size_value)) => {
                                             value.log_odds_ratio = Some(log_odds_ratio_value);
                                             value.total_sample_size = Some(total_sample_size_value as i64);
-                                            map.entry(map_key).or_insert(Vec::new()).push(value);
                                         }
                                         (_, _) => {
                                             value.log_odds_ratio = Some(0.01);
                                             value.total_sample_size = Some(0);
-                                            map.entry(map_key).or_insert(Vec::new()).push(value);
                                         }
                                     }
                                 }
                                 (_, _) => {
                                     value.log_odds_ratio = Some(0.01);
                                     value.total_sample_size = Some(0);
-                                    map.entry(map_key).or_insert(Vec::new()).push(value);
                                 }
                             }
+                            map.entry(map_key).or_insert(Vec::new()).push(value);
                         }
                     }
-                    "infores:biothings-multiomics-ehr-risk" => {
+                    "infores:cohd" | "infores:biothings-multiomics-ehr-risk" => {
                         if let Some(attributes) = &kg_edge.attributes {
                             if let Some(log_odds_attribute) = attributes.iter().find(|a| a.attribute_type_id == "biolink:has_supporting_study_result") {
                                 if let Some(second_level_attributes) = &log_odds_attribute.attributes {
@@ -104,21 +109,19 @@ pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQS
                                                 (Some(log_odds_ratio_value), Some(total_sample_size_value)) => {
                                                     value.log_odds_ratio = Some(log_odds_ratio_value);
                                                     value.total_sample_size = Some(total_sample_size_value as i64);
-                                                    map.entry(map_key).or_insert(Vec::new()).push(value);
                                                 }
                                                 (_, _) => {
                                                     value.log_odds_ratio = Some(0.01);
                                                     value.total_sample_size = Some(0);
-                                                    map.entry(map_key).or_insert(Vec::new()).push(value);
                                                 }
                                             }
                                         }
                                         (_, _) => {
                                             value.log_odds_ratio = Some(0.01);
                                             value.total_sample_size = Some(0);
-                                            map.entry(map_key).or_insert(Vec::new()).push(value);
                                         }
                                     }
+                                    map.entry(map_key).or_insert(Vec::new()).push(value);
                                 }
                             }
                         }
@@ -131,14 +134,14 @@ pub fn build_node_binding_to_log_odds_data_map(query: &mut Query) -> HashMap<CQS
     map
 }
 
-pub fn add_composite_score_attributes(mut query: Query, node_binding_to_log_odds_map: HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>>) -> Query {
-    if let Some(query_graph) = &query.message.query_graph {
+pub fn add_composite_score_attributes(mut message: Message, node_binding_to_log_odds_map: HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>>) -> Message {
+    if let Some(query_graph) = &message.query_graph {
         //this should be a one-hop query so assume only one entry
         if let Some((qg_key, qg_edge)) = query_graph.edges.iter().next() {
             let subject = qg_edge.subject.as_str(); // something like 'n0'
             let object = qg_edge.object.as_str(); // something like 'n1'
 
-            match &mut query.message.results {
+            match &mut message.results {
                 None => {}
                 Some(results) => {
                     debug!("clearing out analyses");
@@ -249,7 +252,25 @@ pub fn add_composite_score_attributes(mut query: Query, node_binding_to_log_odds
         }
     }
 
-    query
+    message
+}
+
+pub fn get_canned_queries(ids: &Vec<CURIE>) -> Vec<Query> {
+    let path_whitelist = env::var("PATH_WHITELIST").unwrap_or("d".to_string());
+    let whitelisted_paths: Vec<_> = path_whitelist.split(",").collect();
+    let curie_token = format!("\"{}\"", ids.clone().into_iter().join("\",\""));
+    let queries = whitelisted_paths
+        .iter()
+        .map(|path| {
+            let file = format!("./src/data/path_{}.template.json", path);
+            let mut template = fs::read_to_string(&file).expect(format!("Could not find file: {}", &file).as_str());
+            template = template.replace("CURIE_TOKEN", curie_token.as_str());
+            debug!("template: {}", template);
+            let query: Query = serde_json::from_str(template.as_str()).unwrap();
+            query
+        })
+        .collect();
+    queries
 }
 
 pub fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f64 {
@@ -273,30 +294,35 @@ pub fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f6
     score.abs()
 }
 
-pub fn merge_query_responses(query: &mut Query, responses: Vec<Query>) {
-    responses.into_iter().for_each(|r| {
-        if let Some(kg) = r.message.knowledge_graph {
-            match &mut query.message.knowledge_graph {
-                Some(qmkg) => {
-                    qmkg.nodes.extend(kg.nodes);
-                    qmkg.edges.extend(kg.edges);
-                }
-                None => {
-                    query.message.knowledge_graph = Some(kg);
-                }
-            }
+pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &Query) -> Result<trapi_model_rs::Response, Box<dyn error::Error + Send + Sync>> {
+    let workflow_runner_url = format!(
+        "{}/query",
+        env::var("WORKFLOW_RUNNER_URL").unwrap_or("https://translator-workflow-runner.renci.org".to_string())
+    );
+
+    let response_result = client.post(workflow_runner_url).json(query).send().await;
+    match response_result {
+        Ok(response) => {
+            debug!("response.status(): {}", response.status());
+            let data = response.text().await?;
+            fs::write(Path::new("/tmp/asdf.json"), &data).unwrap();
+            let trapi_response: trapi_model_rs::Response = serde_json::from_str(data.as_str()).expect("could not parse Query");
+            Ok(trapi_response)
         }
-        if let Some(results) = r.message.results {
-            match &mut query.message.results {
-                Some(qmr) => {
-                    qmr.extend(results);
-                }
-                None => {
-                    query.message.results = Some(results);
-                }
-            }
-        }
-    });
+        Err(e) => Err(Box::new(e)),
+    }
+}
+
+pub fn build_http_client() -> reqwest::Client {
+    let mut headers = header::HeaderMap::new();
+    headers.insert(header::ACCEPT, header::HeaderValue::from_static("application/json"));
+    headers.insert(header::CONTENT_TYPE, header::HeaderValue::from_static("application/json"));
+    reqwest::Client::builder()
+        .redirect(Policy::limited(3))
+        .timeout(Duration::from_secs(900))
+        .default_headers(headers)
+        .build()
+        .expect("Could not build reqwest client")
 }
 
 #[cfg(test)]
@@ -392,7 +418,7 @@ mod test {
         let data = fs::read_to_string("mondo_0004979_output.pretty.json").unwrap();
         let potential_query: Result<Query> = serde_json::from_str(data.as_str());
         if let Some(mut query) = potential_query.ok() {
-            let mut map = build_node_binding_to_log_odds_data_map(&mut query);
+            let mut map = build_node_binding_to_log_odds_data_map(&query.message.knowledge_graph);
             map.iter().for_each(|(k, v)| println!("k: {:?}, values: {:?}", k, v));
         }
         assert!(true);
@@ -406,7 +432,7 @@ mod test {
         // let data = fs::read_to_string("/tmp/response_1683229618787.json").unwrap();
         let potential_query: Result<Query> = serde_json::from_str(data.as_str());
         if let Some(mut query) = potential_query.ok() {
-            let mut map = build_node_binding_to_log_odds_data_map(&mut query);
+            let mut map = build_node_binding_to_log_odds_data_map(&query.message.knowledge_graph);
             // map.iter().for_each(|(k, v)| println!("k: {:?}, values: {:?}", k, v));
 
             // icees-kg: log_odds_ratio = OR1

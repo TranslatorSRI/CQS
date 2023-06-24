@@ -5,11 +5,6 @@ msgpack = "2 MiB"
 
 [default]
 ident = "CQS"
-path_whitelist=["d"]
-#workflow_runner_url="https://translator-workflow-runner.test.transltr.io"
-workflow_runner_url="https://translator-workflow-runner.renci.org"
-#workflow_runner_url="https://translator-workflow-runner.ci.transltr.io"
-#workflow_runner_url="https://translator-workflow-runner.transltr.io"
 
 [debug]
 address = "127.0.0.1"
@@ -23,6 +18,6 @@ address = "0.0.0.0"
 port = 8000
 workers = 4
 keep_alive = 5
-log_level = "normal"
+log_level = "debug"
 extra = false
 

@@ -3,19 +3,24 @@ name = "cqs-rs"
 version = "0.2.0"
 authors = ["Jason Reilly <jdr0887@gmail.com>"]
 edition = "2021"
+keywords = ["ARA", "curated", "query", "service"]
 
 [dependencies]
+chrono = { version = "^0.4", features = ["serde"]}
+diesel = { version = "^2.0", features = ["postgres", "r2d2", "chrono", "serde_json"] }
+diesel_migrations = "^2.0"
+dotenvy = "^0.15"
 env_logger = "^0.9"
 futures = "^0.3"
-hyper = { version = "^0.14", features = ["full"] }
-hyper-tls = "^0.5"
 itertools = "^0.10"
+lazy_static = "^1.4"
 log = { version = "^0.4", features = ["std"] }
+merge-hashmap = { version = "0.1.2", features = ["default", "merge_derive-hashmap"] }
+reqwest = { version = "^0.11", features = ["default", "json"] }
 rocket = { version = "0.5.0-rc.2", features = ["json", "http2"] }
 rocket_okapi = { version = "0.8.0-rc.2", features = ["swagger", "rapidoc"] }
 serde = { version = "^1.0", features = ["derive", "serde_derive"] }
 serde_derive = "^1.0"
 serde_json = "^1.0"
 serde_with = { version = "^2.3", features = ["std", "macros", "json"] }
-trapi-model-rs = { git = "https://github.com/jdr0887/trapi-model-rs.git", tag = "v1.4.0" }
-
+trapi-model-rs = { git = "https://github.com/jdr0887/trapi-model-rs.git" }
