@@ -65,7 +65,7 @@ async fn asyncquery_status(job_id: i32) -> Result<Json<AsyncQueryStatusResponse>
             if let Some(job_response) = job.response {
                 let response: trapi_model_rs::Response = serde_json::from_str(&*String::from_utf8_lossy(job_response.as_slice())).unwrap();
                 if let Some(logs) = response.logs {
-                    let response_url = format!("{}/download/{}", env::var("RESPONSE_URL_ROOT").unwrap_or("http://localhost".to_string()), job.id);
+                    let response_url = format!("{}/download/{}", env::var("RESPONSE_URL").unwrap_or("http://localhost:8000".to_string()), job.id);
                     let status_response = AsyncQueryStatusResponse {
                         status: job.status.to_string(),
                         description: job.status.to_string(),

@@ -10,6 +10,8 @@ RUN mkdir /home/$USERNAME/.cargo
 RUN chown -R $USER_UID:$USER_GID /home/$USERNAME/.cargo
 RUN chmod -R 755 /home/$USERNAME
 
+RUN apt install bash
+
 USER $USERNAME
 RUN mkdir /home/$USERNAME/cqs
 WORKDIR /home/$USERNAME/cqs
@@ -18,5 +20,5 @@ COPY . .
 
 EXPOSE 8000
 
-ENTRYPOINT [ "cargo", "run", "--release" ]
+CMD ["/bin/bash", "-c", "/home/nru/cqs/main.sh"]
 
