@@ -1,6 +1,5 @@
 use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
 use itertools::Itertools;
-use merge_hashmap::Merge;
 use reqwest::header;
 use reqwest::redirect::Policy;
 use std::cmp::Ordering;
