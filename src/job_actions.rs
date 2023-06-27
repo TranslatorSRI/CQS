@@ -7,6 +7,7 @@ use crate::model;
 use crate::model::JobStatus;
 use crate::schema::jobs;
 
+#[allow(dead_code)]
 pub fn find_all(limit: Option<i64>) -> Result<Vec<model::Job>, diesel::result::Error> {
     let mut conn = db::DB_POOL.get().expect("failed to get db connection from pool");
     let results = match limit {
@@ -51,6 +52,7 @@ pub fn insert(new_job: &model::NewJob) -> Result<i32, diesel::result::Error> {
     Ok(result.expect("did not get job id"))
 }
 
+#[allow(dead_code)]
 pub fn delete(gid: &i32) -> Result<bool, diesel::result::Error> {
     let mut conn = db::DB_POOL.get().expect("failed to get db connection from pool");
     let statement = diesel::delete(jobs::table.filter(jobs::dsl::id.eq(gid)));

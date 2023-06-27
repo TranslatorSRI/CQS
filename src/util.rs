@@ -1,14 +1,14 @@
 use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
 use itertools::Itertools;
 use merge_hashmap::Merge;
+use reqwest::header;
 use reqwest::redirect::Policy;
-use reqwest::{header, RequestBuilder};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 use std::{env, error, fs};
-use trapi_model_rs::{Analysis, AsyncQuery, Attribute, EdgeBinding, KnowledgeGraph, Message, Query, CURIE};
+use trapi_model_rs::{Analysis, Attribute, EdgeBinding, KnowledgeGraph, Message, Query, CURIE};
 
 pub fn build_node_binding_to_log_odds_data_map(knowledge_graph: &Option<KnowledgeGraph>) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
     let mut map = HashMap::new();

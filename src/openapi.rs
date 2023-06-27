@@ -1,6 +1,5 @@
 use rocket_okapi::okapi::openapi3::{Contact, Info, License, Object, OpenApi, Server};
-use serde_json::{json, Value};
-use std::collections::HashMap;
+use serde_json::json;
 use std::env;
 
 pub fn custom_openapi_spec() -> OpenApi {

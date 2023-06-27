@@ -14,18 +14,15 @@ use crate::model::{JobStatus, NewJob};
 use chrono::Utc;
 use dotenvy::dotenv;
 use futures::future::join_all;
-use itertools::Itertools;
 use merge_hashmap::Merge;
-use reqwest::StatusCode;
 use rocket::response::status;
 use rocket::serde::json::Json;
 use rocket::{tokio, Build, Rocket, State};
 use rocket_okapi::okapi::openapi3::*;
 use rocket_okapi::{mount_endpoints_and_merged_docs, openapi, openapi_get_routes_spec, swagger_ui::*};
-use std::path::Path;
 use std::time::Duration;
-use std::{env, error, fs};
-use trapi_model_rs::{AsyncQuery, AsyncQueryResponse, AsyncQueryStatusResponse, KnowledgeType, Query, CURIE};
+use std::{env, error};
+use trapi_model_rs::{AsyncQuery, AsyncQueryResponse, AsyncQueryStatusResponse, KnowledgeType, Query};
 
 mod db;
 mod job_actions;
@@ -83,7 +80,7 @@ async fn asyncquery_status(job_id: i32) -> Result<Json<AsyncQueryStatusResponse>
 #[openapi]
 #[post("/query", data = "<data>")]
 async fn query(data: Json<Query>, reqwest_client: &State<reqwest::Client>) -> Json<trapi_model_rs::Response> {
-    let mut query: Query = data.into_inner();
+    let query: Query = data.into_inner();
     let mut responses: Vec<trapi_model_rs::Response> = vec![];
 
     if let Some(query_graph) = &query.message.query_graph {
