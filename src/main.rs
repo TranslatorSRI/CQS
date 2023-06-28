@@ -166,14 +166,14 @@ async fn main() {
 }
 
 async fn process_asyncqueries() {
-    info!("processing asyncquery jobs");
+    debug!("processing asyncquery jobs");
     let reqwest_client = util::build_http_client();
 
     if let Ok(mut undone_jobs) = job_actions::find_undone() {
         let a_job_is_running = undone_jobs.iter().any(|a| a.status == JobStatus::Running);
         match a_job_is_running {
             true => {
-                info!("A job is currently running.");
+                debug!("A job is currently running.");
             }
             false => {
                 if let Some(job) = undone_jobs.iter_mut().next() {
