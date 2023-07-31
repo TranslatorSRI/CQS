@@ -18,7 +18,7 @@
         {
           "id": "lookup",
           "runner_parameters": {
-            "allowlist": [ "infores:automat-icees-kg", "infores:cohd", "infores:biothings-multiomics-ehr-risk" ]
+            "allowlist": [ "infores:automat-icees-kg", "infores:cohd", "infores:biothings-multiomics-ehr-risk", "infores:openpredict" ]
           }
         }
     ]
