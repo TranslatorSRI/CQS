@@ -1,16 +1,15 @@
 replicaCount: 1
-
 image:
   repository: "ghcr.io/translatorsri/cqs"
   tag: "0.2.1"
   pullPolicy: Always
-
 ingress:
   host: ""
   class: ""
   enabled: true
   pathType: ImplementationSpecific
   timeout: 7200 # 1hr
+  major_minor_version: "0.2"
   tls:
     enabled: true
   annotations:
@@ -28,12 +27,10 @@ ingress:
     nginx.ingress.kubernetes.io/upstream-keepalive-timeout: "86400"
     cert-manager.io/cluster-issuer: letsencrypt
     nginx.ingress.kubernetes.io/whitelist-source-range: 0.0.0.0/0,::/0
-
 x_trapi:
   maturity: "development"
   location: "RENCI"
   version: "1.4.0"
-
 app:
   port: 8000
   resources:
@@ -49,13 +46,12 @@ app:
   path_whitelist: "d"
   workflow_runner_url: "https://translator-workflow-runner.renci.org"
   response_url: "http://localhost:8000"
-
 postgres:
   image:
     repository: "postgres"
     tag: "latest"
     pullPolicy: IfNotPresent
-  mountSubPath: "" # for ncats itrb env this seems to be needing to be set, renci env doesn't need it
+  mountSubPath: ""
   resources:
     requests:
       memory: 5Gi
@@ -66,8 +62,8 @@ postgres:
   imagePullSecrets: []
   storage:
     size: 12Gi
-  user: changeme
-  dbName: "changeme"
+  user: cqs
   password: "changeme"
+  dbName: "cqs"
   server: "localhost"
   port: 5432
