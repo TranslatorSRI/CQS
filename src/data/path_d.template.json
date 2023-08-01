@@ -1,25 +1,46 @@
 {
-    "message": {
-        "query_graph": {
-            "nodes": {
-                "n0": {"ids": [CURIE_TOKEN], "categories": ["biolink:Disease"]},
-                "n1": {"categories": ["biolink:ChemicalEntity", "biolink:Drug", "biolink:SmallMolecule"]}
-            },
-            "edges": {
-                "e0": {
-                    "subject": "n0",
-                    "object": "n1",
-                    "predicates": [ "biolink:correlated_with", "biolink:associated_with" ]
-                }
-            }
+  "message": {
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "ids": [
+            CURIE_TOKEN
+          ],
+          "categories": [
+            "biolink:Disease"
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:ChemicalEntity",
+            "biolink:Drug",
+            "biolink:SmallMolecule"
+          ]
         }
-    },
-    "workflow": [
-        {
-          "id": "lookup",
-          "runner_parameters": {
-            "allowlist": [ "infores:automat-icees-kg", "infores:cohd", "infores:biothings-multiomics-ehr-risk", "infores:openpredict" ]
-          }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1",
+          "predicates": [
+            "biolink:correlated_with",
+            "biolink:associated_with"
+          ]
         }
-    ]
+      }
+    }
+  },
+  "workflow": [
+    {
+      "id": "lookup",
+      "runner_parameters": {
+        "allowlist": [
+          "infores:automat-icees-kg",
+          "infores:cohd",
+          "infores:biothings-multiomics-ehr-risk",
+          "infores:openpredict"
+        ]
+      }
+    }
+  ]
 }
