@@ -8,12 +8,15 @@ MINOR_VERSION=`echo ${VERSION:2:2} | sed 's:\.::g'`
 PATCH_VERSION=`echo ${VERSION: -2} | sed 's:\.::g'`
 
 RELEASE_VERSION=$MAJOR_VERSION.$MINOR_VERSION.$(( PATCH_VERSION + 1 ))
+#echo "RELEASE_VERSION: $RELEASE_VERSION"
 
-echo "RELEASE_VERSION: $RELEASE_VERSION"
+MAJOR_MINOR_VERSION="$MAJOR_VERSION.$MINOR_VERSION"
+#echo "MAJOR_MINOR_VERSION: $MAJOR_MINOR_VERSION"
 
 sed -i -e "s|version = \"$VERSION\"|version = \"$RELEASE_VERSION\"|g" Cargo.toml
-sed -i -e "s|version: \"$VERSION\"|version: \"$RELEASE_VERSION\"|g" helm/Chart.yaml
-sed -i -e "s|tag: \"$VERSION\"|tag: \"$RELEASE_VERSION\"|g" helm/values.yaml
+yq -i ".version = \"$RELEASE_VERSION\"" helm/Chart.yaml
+yq -i ".image.tag = \"$RELEASE_VERSION\"" helm/values.yaml
+yq -i ".ingress.major_minor_version = \"$MAJOR_MINOR_VERSION\"" helm/values.yaml
 
 docker build -t $DOCKER_REPO/cqs:$RELEASE_VERSION .
 docker push $DOCKER_REPO/cqs:$RELEASE_VERSION
