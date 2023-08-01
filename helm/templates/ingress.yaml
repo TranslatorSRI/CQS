@@ -14,7 +14,7 @@ spec:
     - host: {{ .Values.ingress.host }}
       http:
         paths:
-          - path: "/v0.1(/|$)(.*)"
+          - path: "/v{{ .Values.ingress.major_minor_version }}(/|$)(.*)"
             pathType: {{ .Values.ingress.pathType }}
             backend:
               service:
