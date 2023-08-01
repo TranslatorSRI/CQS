@@ -1,0 +1,39 @@
+{
+  "message": {
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "ids": [
+            CURIE_TOKEN
+          ],
+          "categories": [
+            [
+              "biolink:ChemicalEntity, biolink:Drug, biolink:SmallMolecule"
+            ]
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:DiseaseOrPhenotypicFeature"
+          ]
+        }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1",
+          "predicates": [
+            "biolink:correlated_with",
+            "biolink:associated_with_increased_likelihood_of",
+            "biolink:associated_with_decreased_likelihood_of"
+          ]
+        }
+      }
+    }
+  },
+  "workflow": [
+    {
+      "id": "lookup"
+    }
+  ]
+}

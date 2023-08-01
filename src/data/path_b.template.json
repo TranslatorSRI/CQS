@@ -1,0 +1,92 @@
+{
+  "message": {
+    "query_graph": {
+      "nodes": {
+        "n0": {
+          "categories": [
+            "biolink:Disease"
+          ],
+          "ids": [
+            CURIE_TOKEN
+          ]
+        },
+        "n1": {
+          "categories": [
+            "biolink:GrossAnatomicalStructure"
+          ]
+        },
+        "n2": {
+          "categories": [
+            "biolink:Gene"
+          ]
+        },
+        "n3": {
+          "categories": [
+            "biolink:Drug",
+            "biolink:SmallMolecule"
+          ]
+        }
+      },
+      "edges": {
+        "e0": {
+          "subject": "n0",
+          "object": "n1",
+          "predicates": [
+            "biolink:located_in"
+          ]
+        },
+        "e1": {
+          "subject": "n1",
+          "object": "n2",
+          "predicates": [
+            "biolink:expresses"
+          ]
+        },
+        "e2": {
+          "subject": "n3",
+          "object": "n2",
+          "predicates": [
+            "biolink:affects"
+          ]
+        }
+      }
+    }
+  },
+  "workflow": [
+    {
+      "id": "fill",
+      "parameters": {
+        "allowlist": [],
+        "qedge_keys": [
+          "e0"
+        ]
+      }
+    },
+    {
+      "id": "fill",
+      "parameters": {
+        "allowlist": [
+          "infores:connections-hypothesis"
+        ],
+        "qedge_keys": [
+          "e1"
+        ]
+      }
+    },
+    {
+      "id": "fill",
+      "parameters": {
+        "allowlist": [],
+        "qedge_keys": [
+          "e2"
+        ]
+      }
+    },
+    {
+      "id": "bind"
+    },
+    {
+      "id": "score"
+    }
+  ]
+}
