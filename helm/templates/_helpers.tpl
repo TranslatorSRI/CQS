@@ -29,7 +29,7 @@ If release name contains chart name it will be used as a full name.
 
 {{/* Common labels */}}
 {{- define "cqs.labels" -}}
-helm.sh/chart: {{ include "cam-kp-api.chart" . }}
+helm.sh/chart: {{ include "cqs.chart" . }}
 {{ include "cqs.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
