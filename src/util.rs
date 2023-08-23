@@ -1,5 +1,5 @@
 use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
-use itertools::Itertools;
+use crate::scoring::CQSQuery;
 use reqwest::header;
 use reqwest::redirect::Policy;
 use std::cmp::Ordering;
@@ -7,140 +7,91 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 use std::{env, error, fs};
-use trapi_model_rs::{Analysis, Attribute, EdgeBinding, KnowledgeGraph, Message, Query, CURIE};
+use trapi_model_rs::{Analysis, Attribute, EdgeBinding, KnowledgeGraph, Query, ResourceRoleEnum, Response};
 
 pub fn build_node_binding_to_log_odds_data_map(knowledge_graph: &Option<KnowledgeGraph>) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
     let mut map = HashMap::new();
     if let Some(kg) = knowledge_graph {
         kg.edges.iter().for_each(|(kg_key, kg_edge)| {
-            if let Some(source) = kg_edge.sources.iter().find(|a| {
-                a.resource_id.contains("infores:cohd") || a.resource_id.contains("infores:automat-icees-kg") || a.resource_id.contains("infores:biothings-multiomics-ehr-risk")
-            }) {
-                let map_key = CQSCompositeScoreKey::new(kg_edge.subject.to_string(), kg_edge.object.to_string());
-                let mut value = CQSCompositeScoreValue::new(source.resource_id.to_string(), kg_key.to_string());
+            let map_key = CQSCompositeScoreKey::new(kg_edge.subject.to_string(), kg_edge.object.to_string());
+            if let Some(source) = kg_edge.sources.iter().find(|a| a.resource_role.eq(&ResourceRoleEnum::PrimaryKnowledgeSource)) {
+                if let Some(attributes) = &kg_edge.attributes {
+                    attributes
+                        .iter()
+                        .filter(|attribute| attribute.attribute_type_id == "biolink:has_supporting_study_result")
+                        .for_each(|attribute| {
+                            if let Some(second_level_attributes) = &attribute.attributes {
+                                let atts: Vec<_> = second_level_attributes.iter().filter_map(|a| serde_json::from_value::<Attribute>(a.clone()).ok()).collect();
 
-                match source.resource_id.as_str() {
-                    // "infores:cohd" => {
-                    //     if let Some(attributes) = &kg_edge.attributes {
-                    //         if let Some(log_odds_attribute) = attributes
-                    //             .iter()
-                    //             .find(|a| a.attribute_type_id == "biolink:has_supporting_study_result" && a.value_type_id == Some("biolink:LogOddsAnalysisResult".to_string()))
-                    //         {
-                    //             if let Some(second_level_attributes) = &log_odds_attribute.attributes {
-                    //                 let atts: Vec<_> = second_level_attributes.iter().filter_map(|a| serde_json::from_value::<Attribute>(a.clone()).ok()).collect();
-                    //
-                    //                 let potential_log_odds_ratio_attribute = atts
-                    //                     .iter()
-                    //                     .find(|a| a.attribute_type_id == "biolink:log_odds_ratio" && a.original_attribute_name == Some("log_odds".to_string()));
-                    //
-                    //                 let potential_total_sample_size_attribute = atts
-                    //                     .iter()
-                    //                     .find(|a| a.attribute_type_id == "biolink:total_sample_size" && a.original_attribute_name == Some("concept_pair_count".to_string()));
-                    //
-                    //                 match (potential_log_odds_ratio_attribute, potential_total_sample_size_attribute) {
-                    //                     (Some(log_odds_ratio_attribute), Some(total_sample_size_attribute)) => {
-                    //                         match (log_odds_ratio_attribute.value.as_f64(), total_sample_size_attribute.value.as_i64()) {
-                    //                             (Some(log_odds_ratio_value), Some(total_sample_size_value)) => {
-                    //                                 value.log_odds_ratio = Some(log_odds_ratio_value);
-                    //                                 value.total_sample_size = Some(total_sample_size_value as i64);
-                    //                                 map.entry(map_key).or_insert(Vec::new()).push(value);
-                    //                             }
-                    //                             (_, _) => {
-                    //                                 value.log_odds_ratio = Some(0.01);
-                    //                                 value.total_sample_size = Some(0);
-                    //                                 map.entry(map_key).or_insert(Vec::new()).push(value);
-                    //                             }
-                    //                         }
-                    //                     }
-                    //                     (_, _) => {
-                    //                         value.log_odds_ratio = Some(0.01);
-                    //                         value.total_sample_size = Some(0);
-                    //                         map.entry(map_key).or_insert(Vec::new()).push(value);
-                    //                     }
-                    //                 }
-                    //             }
-                    //         }
-                    //     }
-                    // }
-                    "infores:automat-icees-kg" => {
-                        if let Some(attributes) = &kg_edge.attributes {
-                            let potential_log_odds_ratio_attribute = attributes
-                                .iter()
-                                .find(|a| a.attribute_type_id == "biolink:Attribute" && a.original_attribute_name == Some("log_odds_ratio".to_string()));
-
-                            let potential_total_sample_size_attribute = attributes
-                                .iter()
-                                .find(|a| a.attribute_type_id == "biolink:Attribute" && a.original_attribute_name == Some("total_sample_size".to_string()));
-
-                            match (potential_log_odds_ratio_attribute, potential_total_sample_size_attribute) {
-                                (Some(log_odds_ratio_attribute), Some(total_sample_size_attribute)) => {
-                                    match (log_odds_ratio_attribute.value.as_f64(), total_sample_size_attribute.value.as_f64()) {
+                                if let (Some(log_odds_ratio_attribute), Some(total_sample_size_attribute)) = (
+                                    atts.iter().find(|a| a.attribute_type_id == "biolink:log_odds_ratio"),
+                                    atts.iter().find(|a| a.attribute_type_id == "biolink:total_sample_size"),
+                                ) {
+                                    let mut value = CQSCompositeScoreValue::new(source.resource_id.to_string(), kg_key.to_string());
+                                    match (log_odds_ratio_attribute.value.as_f64(), total_sample_size_attribute.value.as_i64()) {
                                         (Some(log_odds_ratio_value), Some(total_sample_size_value)) => {
                                             value.log_odds_ratio = Some(log_odds_ratio_value);
-                                            value.total_sample_size = Some(total_sample_size_value as i64);
+                                            value.total_sample_size = Some(total_sample_size_value);
                                         }
                                         (_, _) => {
                                             value.log_odds_ratio = Some(0.01);
                                             value.total_sample_size = Some(0);
                                         }
                                     }
-                                }
-                                (_, _) => {
-                                    value.log_odds_ratio = Some(0.01);
-                                    value.total_sample_size = Some(0);
+                                    map.entry(map_key.clone()).or_insert(Vec::new()).push(value);
                                 }
                             }
-                            map.entry(map_key).or_insert(Vec::new()).push(value);
-                        }
-                    }
-                    "infores:cohd" | "infores:biothings-multiomics-ehr-risk" => {
-                        if let Some(attributes) = &kg_edge.attributes {
-                            if let Some(log_odds_attribute) = attributes.iter().find(|a| a.attribute_type_id == "biolink:has_supporting_study_result") {
-                                if let Some(second_level_attributes) = &log_odds_attribute.attributes {
-                                    let atts: Vec<_> = second_level_attributes.iter().filter_map(|a| serde_json::from_value::<Attribute>(a.clone()).ok()).collect();
+                        });
 
-                                    let potential_log_odds_ratio_attribute = atts.iter().find(|a| a.attribute_type_id == "biolink:log_odds_ratio");
-                                    let potential_total_sample_size_attribute = atts.iter().find(|a| a.attribute_type_id == "biolink:total_sample_size");
-
-                                    match (potential_log_odds_ratio_attribute, potential_total_sample_size_attribute) {
-                                        (Some(log_odds_ratio_attribute), Some(total_sample_size_attribute)) => {
-                                            match (log_odds_ratio_attribute.value.as_f64(), total_sample_size_attribute.value.as_i64()) {
-                                                (Some(log_odds_ratio_value), Some(total_sample_size_value)) => {
-                                                    value.log_odds_ratio = Some(log_odds_ratio_value);
-                                                    value.total_sample_size = Some(total_sample_size_value as i64);
-                                                }
-                                                (_, _) => {
-                                                    value.log_odds_ratio = Some(0.01);
-                                                    value.total_sample_size = Some(0);
-                                                }
-                                            }
-                                        }
-                                        (_, _) => {
-                                            value.log_odds_ratio = Some(0.01);
-                                            value.total_sample_size = Some(0);
-                                        }
-                                    }
-                                    map.entry(map_key).or_insert(Vec::new()).push(value);
-                                }
+                    //ICEES does not use nested attributes keyed off of 'biolink:has_supporting_study_result' attribute_type_id
+                    if let (Some(log_odds_ratio_attribute), Some(total_sample_size_attribute)) = (
+                        attributes.iter().find(|a| a.original_attribute_name == Some("log_odds_ratio".to_string())),
+                        attributes.iter().find(|a| a.original_attribute_name == Some("total_sample_size".to_string())),
+                    ) {
+                        let mut value = CQSCompositeScoreValue::new(source.resource_id.to_string(), kg_key.to_string());
+                        // icees treats total_sample_size as a float, should be an int
+                        match (log_odds_ratio_attribute.value.as_f64(), total_sample_size_attribute.value.as_f64()) {
+                            (Some(log_odds_ratio_value), Some(total_sample_size_value)) => {
+                                value.log_odds_ratio = Some(log_odds_ratio_value);
+                                value.total_sample_size = Some(total_sample_size_value as i64);
+                            }
+                            (_, _) => {
+                                value.log_odds_ratio = Some(0.01);
+                                value.total_sample_size = Some(0);
                             }
                         }
+                        map.entry(map_key.clone()).or_insert(Vec::new()).push(value);
                     }
-                    &_ => {}
-                };
+
+                    // entry may exist, but not have either a 'log_odds_ratio' or a 'total_sample_size'
+                    match map.get(&map_key) {
+                        None => {
+                            let mut value = CQSCompositeScoreValue::new(source.resource_id.to_string(), kg_key.to_string());
+                            value.log_odds_ratio = Some(0.01);
+                            value.total_sample_size = Some(0);
+                            map.entry(map_key.clone()).or_insert(Vec::new()).push(value);
+                        }
+                        _ => {}
+                    }
+                }
             }
         });
     }
     map
 }
 
-pub fn add_composite_score_attributes(mut message: Message, node_binding_to_log_odds_map: HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>>) -> Message {
-    if let Some(query_graph) = &message.query_graph {
+pub fn add_composite_score_attributes(
+    mut response: Response,
+    node_binding_to_log_odds_map: HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>>,
+    cqs_query: &Box<dyn CQSQuery>,
+) -> Response {
+    if let Some(query_graph) = &response.message.query_graph {
         //this should be a one-hop query so assume only one entry
         if let Some((qg_key, qg_edge)) = query_graph.edges.iter().next() {
             let subject = qg_edge.subject.as_str(); // something like 'n0'
             let object = qg_edge.object.as_str(); // something like 'n1'
 
-            match &mut message.results {
+            match &mut response.message.results {
                 None => {}
                 Some(results) => {
                     debug!("clearing out analyses");
@@ -194,17 +145,12 @@ pub fn add_composite_score_attributes(mut message: Message, node_binding_to_log_
                                 let entry = node_binding_to_log_odds_map.iter().find(|(k, _v)| **k == entry_key_searchable);
                                 match entry {
                                     Some((_entry_key, entry_values)) => {
-                                        let score = compute_composite_score(entry_values);
                                         let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
                                         let mut edge_binding_map = HashMap::new();
                                         edge_binding_map.insert(qg_key.clone(), kg_edge_keys);
                                         let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
                                         analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
-                                        if score.is_nan() {
-                                            analysis.score = Some(0.01_f64.atan() * 2.0 / std::f64::consts::PI);
-                                        } else {
-                                            analysis.score = Some(score.atan() * 2.0 / std::f64::consts::PI);
-                                        }
+                                        analysis.score = Some(cqs_query.compute_score(entry_values));
                                         debug!("analysis: {:?}", analysis);
                                         r.analyses.push(analysis);
                                     }
@@ -213,15 +159,10 @@ pub fn add_composite_score_attributes(mut message: Message, node_binding_to_log_
                                         let entry = node_binding_to_log_odds_map.iter().find(|(k, _v)| **k == entry_key_inverse_searchable);
 
                                         if let Some((_entry_key, entry_values)) = entry {
-                                            let score = compute_composite_score(entry_values);
                                             let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
                                             let mut analysis = Analysis::new("infores:cqs".into(), HashMap::from([(qg_key.clone(), kg_edge_keys)]));
                                             analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
-                                            if score.is_nan() {
-                                                analysis.score = Some(0.01_f64.atan() * 2.0 / std::f64::consts::PI);
-                                            } else {
-                                                analysis.score = Some(score.atan() * 2.0 / std::f64::consts::PI);
-                                            }
+                                            analysis.score = Some(cqs_query.compute_score(entry_values));
                                             debug!("analysis: {:?}", analysis);
                                             r.analyses.push(analysis);
                                         }
@@ -251,46 +192,7 @@ pub fn add_composite_score_attributes(mut message: Message, node_binding_to_log_
         }
     }
 
-    message
-}
-
-pub fn get_canned_queries(ids: &Vec<CURIE>) -> Vec<Query> {
-    let path_whitelist = env::var("PATH_WHITELIST").unwrap_or("d".to_string());
-    let whitelisted_paths: Vec<_> = path_whitelist.split(",").collect();
-    let curie_token = format!("\"{}\"", ids.clone().into_iter().join("\",\""));
-    let queries = whitelisted_paths
-        .iter()
-        .map(|path| {
-            let file = format!("./src/data/path_{}.template.json", path);
-            let mut template = fs::read_to_string(&file).expect(format!("Could not find file: {}", &file).as_str());
-            template = template.replace("CURIE_TOKEN", curie_token.as_str());
-            debug!("template: {}", template);
-            let query: Query = serde_json::from_str(template.as_str()).unwrap();
-            query
-        })
-        .collect();
-    queries
-}
-
-pub fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f64 {
-    let total_sample_sizes: Vec<_> = entry_values.iter().filter_map(|ev| ev.total_sample_size).collect();
-    let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
-
-    let weights: Vec<_> = entry_values
-        .iter()
-        // .filter(|ev| ev.total_sample_size.is_some())
-        .map(|ev| ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64)
-        .collect();
-    let sum_of_weights = weights.iter().sum::<f64>(); // (W1 + W2 + W3)
-
-    let score_numerator = entry_values
-        .iter()
-        // .filter(|ev| ev.total_sample_size.is_some())
-        .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
-        .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
-
-    let score = score_numerator / sum_of_weights;
-    score.abs()
+    response
 }
 
 pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &Query) -> Result<trapi_model_rs::Response, Box<dyn error::Error + Send + Sync>> {
@@ -304,8 +206,13 @@ pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &Que
         Ok(response) => {
             debug!("response.status(): {}", response.status());
             let data = response.text().await?;
-            fs::write(Path::new("/tmp/asdf.json"), &data).unwrap();
+            // fs::write(Path::new(format!("/tmp/cqs/{}.json", uuid::Uuid::new_v4().to_string()).as_str()), &data.as_str()).unwrap();
             let trapi_response: trapi_model_rs::Response = serde_json::from_str(data.as_str()).expect("could not parse Query");
+            fs::write(
+                Path::new(format!("/tmp/cqs/{}.json", uuid::Uuid::new_v4().to_string()).as_str()),
+                serde_json::to_string_pretty(&trapi_response).unwrap(),
+            )
+            .unwrap();
             Ok(trapi_response)
         }
         Err(e) => Err(Box::new(e)),
@@ -327,8 +234,10 @@ pub fn build_http_client() -> reqwest::Client {
 #[cfg(test)]
 mod test {
     use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
+    use crate::scoring::{CQSQuery, CQSQueryA, CQSQueryD};
     use crate::util;
-    use crate::util::{build_node_binding_to_log_odds_data_map, compute_composite_score};
+    use crate::util::build_node_binding_to_log_odds_data_map;
+    use itertools::Itertools;
     use serde_json::Result;
     use std::cmp::Ordering;
     use std::collections::HashMap;
@@ -405,7 +314,8 @@ mod test {
             },
         ];
 
-        let score = compute_composite_score(&values);
+        let cqs_query = CQSQueryD::new();
+        let score = cqs_query.compute_score(&values);
         let normalized_score = score.atan() * 2.0 / std::f64::consts::PI;
         println!("score: {:?}, normalized_score: {:?}", score, normalized_score);
         assert!(true);
@@ -414,12 +324,49 @@ mod test {
     #[test]
     // #[ignore]
     fn test_build_node_binding_to_log_odds_data_map() {
-        let data = fs::read_to_string("mondo_0004979_output.pretty.json").unwrap();
+        let data = fs::read_to_string("/tmp/cqs/220373f2-7c16-40eb-8bd8-070adbfbc9ea.json").unwrap();
         let potential_query: Result<Query> = serde_json::from_str(data.as_str());
         if let Some(mut query) = potential_query.ok() {
             let mut map = build_node_binding_to_log_odds_data_map(&query.message.knowledge_graph);
             map.iter().for_each(|(k, v)| println!("k: {:?}, values: {:?}", k, v));
         }
+        assert!(true);
+    }
+
+    #[test]
+    // #[ignore]
+    fn test_find_missing_edges() {
+        let wfr_response_data = fs::read_to_string("/tmp/cqs/220373f2-7c16-40eb-8bd8-070adbfbc9ea.json").unwrap();
+        let wfr_response: trapi_model_rs::Response = serde_json::from_str(wfr_response_data.as_str()).unwrap();
+
+        let cqs_response_data = fs::read_to_string("/tmp/sample_output.pretty.json").unwrap();
+        let cqs_response: trapi_model_rs::Response = serde_json::from_str(cqs_response_data.as_str()).unwrap();
+
+        let mut map: HashMap<String, Vec<i32>> = HashMap::new();
+
+        if let Some(wfr_kg) = wfr_response.message.knowledge_graph {
+            if let Some(cqs_message_results) = cqs_response.message.results {
+                cqs_message_results.iter().for_each(|a| {
+                    a.analyses.iter().for_each(|b| {
+                        b.edge_bindings.iter().for_each(|(c_key, c_value)| {
+                            c_value.iter().for_each(|d| {
+                                if wfr_kg.edges.keys().contains(&d.id) {
+                                    map.entry(d.id.clone()).or_insert(Vec::new()).push(1);
+                                }
+                            })
+                        });
+                    });
+                });
+            }
+        }
+
+        println!("looking for missing entries");
+        map.iter().for_each(|(k, v)| {
+            if v.is_empty() {
+                println!("{} is missing", k);
+            }
+        });
+
         assert!(true);
     }
 
@@ -449,6 +396,8 @@ mod test {
             // Score = (W1 * OR1 + W2 * OR2 + W3 * OR3) / (W1 + W2 + W3)
 
             if let Some(query_graph) = &query.message.query_graph {
+                let cqs_query = CQSQueryD::new();
+
                 //this should be a one-hop query so assume only one entry
                 if let Some((qg_key, qg_edge)) = query_graph.edges.iter().next() {
                     let subject = qg_edge.subject.as_str(); // something like 'n0'
@@ -505,7 +454,7 @@ mod test {
                                         match entry {
                                             Some((entry_key, entry_values)) => {
                                                 println!("entry_key: {:?}, entry_values: {:?}", entry_key, entry_values);
-                                                let score = util::compute_composite_score(entry_values);
+                                                let score = cqs_query.compute_score(entry_values);
                                                 println!("score: {:?}", score);
                                                 // subject: "MONDO:0009061", object: "PUBCHEM.COMPOUND:16220172"
                                                 if first_subject_nb.id == "MONDO:0009061" && first_object_nb.id == "PUBCHEM.COMPOUND:16220172" {
@@ -530,7 +479,7 @@ mod test {
 
                                                 if let Some((entry_key, entry_values)) = entry {
                                                     println!("entry_key: {:?}, entry_values: {:?}", entry_key, entry_values);
-                                                    let score = util::compute_composite_score(entry_values);
+                                                    let score = cqs_query.compute_score(entry_values);
                                                     println!("score: {:?}", score);
 
                                                     let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();

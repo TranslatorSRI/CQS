@@ -11,17 +11,19 @@ extern crate log;
 extern crate lazy_static;
 
 use crate::model::{JobStatus, NewJob};
+use crate::scoring::{CQSQuery, CQSQueryA, CQSQueryD};
 use chrono::Utc;
 use dotenvy::dotenv;
 use futures::future::join_all;
+use itertools::Itertools;
 use merge_hashmap::Merge;
 use rocket::response::status;
 use rocket::serde::json::Json;
 use rocket::{tokio, Build, Rocket, State};
 use rocket_okapi::okapi::openapi3::*;
 use rocket_okapi::{mount_endpoints_and_merged_docs, openapi, openapi_get_routes_spec, swagger_ui::*};
+use std::env;
 use std::time::Duration;
-use std::{env, error};
 use trapi_model_rs::{AsyncQuery, AsyncQueryResponse, AsyncQueryStatusResponse, KnowledgeType, Query};
 
 mod db;
@@ -29,7 +31,12 @@ mod job_actions;
 mod model;
 mod openapi;
 mod schema;
+mod scoring;
 mod util;
+
+lazy_static! {
+    pub static ref WHITELISTED_CANNED_QUERIES: Vec<Box<dyn CQSQuery>> = vec![Box::new(CQSQueryA::new()), Box::new(CQSQueryD::new())];
+}
 
 #[openapi]
 #[post("/asyncquery", data = "<data>")]
@@ -94,16 +101,16 @@ async fn query(data: Json<Query>, reqwest_client: &State<reqwest::Client>) -> Js
         }) {
             if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
                 if let Some(ids) = &node_value.ids {
-                    let canned_queries = util::get_canned_queries(ids);
-                    let future_responses: Vec<_> = canned_queries
+                    let curie_token = format!("\"{}\"", ids.clone().into_iter().join("\",\""));
+                    let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES
                         .iter()
-                        .map(|canned_query| util::post_query_to_workflow_runner(&reqwest_client, &canned_query))
+                        .map(|cqs_query| process(cqs_query, &curie_token, &reqwest_client))
                         .collect();
-                    let joined_future_responses: Vec<Result<trapi_model_rs::Response, Box<dyn error::Error + Send + Sync>>> = join_all(future_responses).await;
-                    joined_future_responses.into_iter().for_each(|result| match result {
-                        Ok(trapi_response) => responses.push(trapi_response),
-                        Err(e) => warn!("{}", e),
-                    });
+                    let joined_future_responses = join_all(future_responses).await;
+                    joined_future_responses
+                        .into_iter()
+                        .filter_map(std::convert::identity)
+                        .for_each(|trapi_response| responses.push(trapi_response));
                 }
             }
         }
@@ -115,9 +122,10 @@ async fn query(data: Json<Query>, reqwest_client: &State<reqwest::Client>) -> Js
         message.merge(r.message);
     });
 
-    let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
-
-    let mut ret = trapi_model_rs::Response::new(util::add_composite_score_attributes(message, node_binding_to_log_odds_map));
+    // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
+    //
+    // let mut ret = trapi_model_rs::Response::new(util::add_composite_score_attributes(message, node_binding_to_log_odds_map));
+    let mut ret = trapi_model_rs::Response::new(message);
     ret.status = Some("Success".to_string());
     ret.workflow = query.workflow.clone();
     ret.biolink_version = Some(env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string()));
@@ -198,16 +206,39 @@ async fn process_asyncqueries() {
                         }) {
                             if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
                                 if let Some(ids) = &node_value.ids {
-                                    let canned_queries = util::get_canned_queries(ids);
-                                    let future_responses: Vec<_> = canned_queries
+                                    let curie_token = format!("\"{}\"", ids.clone().into_iter().join("\",\""));
+                                    let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES
                                         .iter()
-                                        .map(|canned_query| util::post_query_to_workflow_runner(&reqwest_client, &canned_query))
+                                        .map(|cqs_query| process(cqs_query, &curie_token, &reqwest_client))
                                         .collect();
-                                    let joined_future_responses: Vec<Result<trapi_model_rs::Response, Box<dyn error::Error + Send + Sync>>> = join_all(future_responses).await;
-                                    joined_future_responses.into_iter().for_each(|result| match result {
-                                        Ok(trapi_response) => responses.push(trapi_response),
-                                        Err(e) => warn!("{}", e),
-                                    });
+                                    let joined_future_responses = join_all(future_responses).await;
+                                    joined_future_responses
+                                        .into_iter()
+                                        .filter_map(std::convert::identity)
+                                        .for_each(|trapi_response| responses.push(trapi_response));
+
+                                    // let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES
+                                    //     .iter()
+                                    //     .map(|cqs_query| async {
+                                    //         let canned_query: Query = cqs_query.query(curie_token.as_str());
+                                    //         let canned_query_response = util::post_query_to_workflow_runner(&reqwest_client, &canned_query).await.unwrap();
+                                    //         let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&canned_query_response.message.knowledge_graph);
+                                    //         let trapi_response = util::add_composite_score_attributes(canned_query_response, node_binding_to_log_odds_map, &cqs_query);
+                                    //         trapi_response
+                                    //     })
+                                    //     .collect();
+                                    // let joined_future_responses = join_all(future_responses).await;
+                                    // joined_future_responses.into_iter().for_each(|trapi_response| responses.push(trapi_response));
+                                    // let canned_queries = util::get_canned_queries(ids);
+                                    // let future_responses: Vec<_> = canned_queries
+                                    //     .iter()
+                                    //     .map(|canned_query| util::post_query_to_workflow_runner(&reqwest_client, &canned_query))
+                                    //     .collect();
+                                    // let joined_future_responses: Vec<Result<trapi_model_rs::Response, Box<dyn error::Error + Send + Sync>>> = join_all(future_responses).await;
+                                    // joined_future_responses.into_iter().for_each(|result| match result {
+                                    //     Ok(trapi_response) => responses.push(trapi_response),
+                                    //     Err(e) => warn!("{}", e),
+                                    // });
                                 }
                             }
                         }
@@ -224,11 +255,12 @@ async fn process_asyncqueries() {
                             message.merge(r.message);
                         });
 
-                        let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
-
-                        let message_with_score_attributes = util::add_composite_score_attributes(message, node_binding_to_log_odds_map);
-
-                        let mut ret = trapi_model_rs::Response::new(message_with_score_attributes);
+                        // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
+                        //
+                        // let message_with_score_attributes = util::add_composite_score_attributes(message, node_binding_to_log_odds_map);
+                        //
+                        // let mut ret = trapi_model_rs::Response::new(message_with_score_attributes);
+                        let mut ret = trapi_model_rs::Response::new(message);
                         ret.status = Some("Success".to_string());
                         ret.workflow = query.workflow.clone();
                         ret.biolink_version = Some(env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string()));
@@ -289,6 +321,15 @@ pub fn create_server() -> Rocket<Build> {
         "" => get_routes_and_docs(&openapi_settings),
     };
     building_rocket
+}
+
+async fn process(cqs_query: &Box<dyn CQSQuery>, curie_token: &str, reqwest_client: &reqwest::Client) -> Option<trapi_model_rs::Response> {
+    let canned_query: Query = cqs_query.query(curie_token);
+    let canned_query_response = util::post_query_to_workflow_runner(&reqwest_client, &canned_query).await.unwrap();
+    let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&canned_query_response.message.knowledge_graph);
+    node_binding_to_log_odds_map.iter().for_each(|a| debug!("node_binding_to_log_odds_map entry: {:?}", a));
+    let trapi_response = util::add_composite_score_attributes(canned_query_response, node_binding_to_log_odds_map, &cqs_query);
+    Some(trapi_response)
 }
 
 pub fn get_routes_and_docs(settings: &rocket_okapi::settings::OpenApiSettings) -> (Vec<rocket::Route>, OpenApi) {
