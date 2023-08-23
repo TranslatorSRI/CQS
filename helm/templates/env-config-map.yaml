@@ -3,7 +3,6 @@ kind: ConfigMap
 metadata:
   name: {{ include "cqs.fullname" . }}-configmap
 data:
-  PATH_WHITELIST: "{{ .Values.app.path_whitelist }}"
   WORKFLOW_RUNNER_URL: "{{ .Values.app.workflow_runner_url }}"
   RUST_LOG: "{{ .Values.app.log_level }}"
   RESPONSE_URL: "{{ .Values.app.response_url }}"
