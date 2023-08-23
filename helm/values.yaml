@@ -43,7 +43,6 @@ app:
       cpu: 6
       ephemeral-storage: 4Gi
   log_level: "info,rocket=debug,launch=debug"
-  path_whitelist: "d"
   workflow_runner_url: "https://translator-workflow-runner.renci.org"
   response_url: "http://localhost:8000"
 postgres:
