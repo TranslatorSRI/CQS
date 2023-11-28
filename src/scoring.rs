@@ -27,6 +27,7 @@ pub fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f6
 }
 
 pub trait CQSQuery: Send + Sync {
+    fn name(&self) -> String;
     fn query(&self, curie_token: &str) -> Query;
     fn compute_score(&self, entry_values: &Vec<CQSCompositeScoreValue>) -> f64;
 }
@@ -42,6 +43,10 @@ macro_rules! impl_wrapper {
         }
 
         impl CQSQuery for $foo {
+            fn name(&self) -> String {
+                $bar.to_string()
+            }
+
             fn query(&self, curie_token: &str) -> Query {
                 let file = format!("./src/data/path_{}.template.json", $bar.to_string());
                 let mut template = fs::read_to_string(&file).expect(format!("Could not find file: {}", &file).as_str());

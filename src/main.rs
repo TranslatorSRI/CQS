@@ -3,7 +3,6 @@
 extern crate rocket;
 #[macro_use]
 extern crate diesel;
-#[macro_use]
 extern crate diesel_migrations;
 #[macro_use]
 extern crate log;
@@ -11,7 +10,6 @@ extern crate log;
 extern crate lazy_static;
 
 use crate::model::{JobStatus, NewJob};
-use crate::scoring::{CQSQuery, CQSQueryA, CQSQueryD};
 use chrono::Utc;
 use dotenvy::dotenv;
 use futures::future::join_all;
@@ -35,7 +33,13 @@ mod scoring;
 mod util;
 
 lazy_static! {
-    pub static ref WHITELISTED_CANNED_QUERIES: Vec<Box<dyn CQSQuery>> = vec![Box::new(CQSQueryA::new()), Box::new(CQSQueryD::new())];
+    pub static ref WHITELISTED_CANNED_QUERIES: Vec<Box<dyn scoring::CQSQuery>> = vec![
+        Box::new(scoring::CQSQueryA::new()),
+        Box::new(scoring::CQSQueryB::new()),
+        // Box::new(scoring::CQSQueryC::new()),
+        // Box::new(scoring::CQSQueryD::new()),
+        Box::new(scoring::CQSQueryE::new())
+    ];
 }
 
 #[openapi]
@@ -216,29 +220,6 @@ async fn process_asyncqueries() {
                                         .into_iter()
                                         .filter_map(std::convert::identity)
                                         .for_each(|trapi_response| responses.push(trapi_response));
-
-                                    // let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES
-                                    //     .iter()
-                                    //     .map(|cqs_query| async {
-                                    //         let canned_query: Query = cqs_query.query(curie_token.as_str());
-                                    //         let canned_query_response = util::post_query_to_workflow_runner(&reqwest_client, &canned_query).await.unwrap();
-                                    //         let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&canned_query_response.message.knowledge_graph);
-                                    //         let trapi_response = util::add_composite_score_attributes(canned_query_response, node_binding_to_log_odds_map, &cqs_query);
-                                    //         trapi_response
-                                    //     })
-                                    //     .collect();
-                                    // let joined_future_responses = join_all(future_responses).await;
-                                    // joined_future_responses.into_iter().for_each(|trapi_response| responses.push(trapi_response));
-                                    // let canned_queries = util::get_canned_queries(ids);
-                                    // let future_responses: Vec<_> = canned_queries
-                                    //     .iter()
-                                    //     .map(|canned_query| util::post_query_to_workflow_runner(&reqwest_client, &canned_query))
-                                    //     .collect();
-                                    // let joined_future_responses: Vec<Result<trapi_model_rs::Response, Box<dyn error::Error + Send + Sync>>> = join_all(future_responses).await;
-                                    // joined_future_responses.into_iter().for_each(|result| match result {
-                                    //     Ok(trapi_response) => responses.push(trapi_response),
-                                    //     Err(e) => warn!("{}", e),
-                                    // });
                                 }
                             }
                         }
@@ -323,13 +304,14 @@ pub fn create_server() -> Rocket<Build> {
     building_rocket
 }
 
-async fn process(cqs_query: &Box<dyn CQSQuery>, curie_token: &str, reqwest_client: &reqwest::Client) -> Option<trapi_model_rs::Response> {
+async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, curie_token: &str, reqwest_client: &reqwest::Client) -> Option<trapi_model_rs::Response> {
+    info!("PROCESSING CQS QUERY: {}", cqs_query.name());
     let canned_query: Query = cqs_query.query(curie_token);
     let canned_query_response = util::post_query_to_workflow_runner(&reqwest_client, &canned_query).await.unwrap();
-    let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&canned_query_response.message.knowledge_graph);
-    node_binding_to_log_odds_map.iter().for_each(|a| debug!("node_binding_to_log_odds_map entry: {:?}", a));
-    let trapi_response = util::add_composite_score_attributes(canned_query_response, node_binding_to_log_odds_map, &cqs_query);
-    Some(trapi_response)
+    Some(canned_query_response)
+    // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(canned_query_response.message.clone());
+    // let trapi_response = util::add_composite_score_attributes(canned_query_response, node_binding_to_log_odds_map, &cqs_query);
+    // Some(trapi_response)
 }
 
 pub fn get_routes_and_docs(settings: &rocket_okapi::settings::OpenApiSettings) -> (Vec<rocket::Route>, OpenApi) {

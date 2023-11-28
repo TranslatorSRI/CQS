@@ -14,7 +14,7 @@ RUN apt install bash
 
 USER $USERNAME
 RUN mkdir /home/$USERNAME/cqs
-#RUN mkdir /tmp/cqs
+RUN mkdir /tmp/cqs
 WORKDIR /home/$USERNAME/cqs
 
 COPY . .

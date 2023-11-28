@@ -1,5 +1,5 @@
 use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
-use crate::scoring::CQSQuery;
+use crate::scoring;
 use reqwest::header;
 use reqwest::redirect::Policy;
 use std::cmp::Ordering;
@@ -7,11 +7,12 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 use std::{env, error, fs};
-use trapi_model_rs::{Analysis, Attribute, EdgeBinding, KnowledgeGraph, Query, ResourceRoleEnum, Response};
+use trapi_model_rs::{Analysis, Attribute, EdgeBinding, Message, Query, ResourceRoleEnum, Response};
 
-pub fn build_node_binding_to_log_odds_data_map(knowledge_graph: &Option<KnowledgeGraph>) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
+pub fn build_node_binding_to_log_odds_data_map(message: Message) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
     let mut map = HashMap::new();
-    if let Some(kg) = knowledge_graph {
+
+    if let Some(kg) = message.knowledge_graph {
         kg.edges.iter().for_each(|(kg_key, kg_edge)| {
             let map_key = CQSCompositeScoreKey::new(kg_edge.subject.to_string(), kg_edge.object.to_string());
             if let Some(source) = kg_edge.sources.iter().find(|a| a.resource_role.eq(&ResourceRoleEnum::PrimaryKnowledgeSource)) {
@@ -83,7 +84,7 @@ pub fn build_node_binding_to_log_odds_data_map(knowledge_graph: &Option<Knowledg
 pub fn add_composite_score_attributes(
     mut response: Response,
     node_binding_to_log_odds_map: HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>>,
-    cqs_query: &Box<dyn CQSQuery>,
+    cqs_query: &Box<dyn scoring::CQSQuery>,
 ) -> Response {
     if let Some(query_graph) = &response.message.query_graph {
         //this should be a one-hop query so assume only one entry
@@ -206,13 +207,12 @@ pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &Que
         Ok(response) => {
             debug!("response.status(): {}", response.status());
             let data = response.text().await?;
-            // fs::write(Path::new(format!("/tmp/cqs/{}.json", uuid::Uuid::new_v4().to_string()).as_str()), &data.as_str()).unwrap();
             let trapi_response: trapi_model_rs::Response = serde_json::from_str(data.as_str()).expect("could not parse Query");
-            fs::write(
-                Path::new(format!("/tmp/cqs/{}.json", uuid::Uuid::new_v4().to_string()).as_str()),
-                serde_json::to_string_pretty(&trapi_response).unwrap(),
-            )
-            .unwrap();
+            // fs::write(
+            //     Path::new(format!("/tmp/cqs/{}.json", uuid::Uuid::new_v4().to_string()).as_str()),
+            //     serde_json::to_string_pretty(&trapi_response).unwrap(),
+            // )
+            // .expect("failed to write output");
             Ok(trapi_response)
         }
         Err(e) => Err(Box::new(e)),
@@ -327,7 +327,7 @@ mod test {
         let data = fs::read_to_string("/tmp/cqs/220373f2-7c16-40eb-8bd8-070adbfbc9ea.json").unwrap();
         let potential_query: Result<Query> = serde_json::from_str(data.as_str());
         if let Some(mut query) = potential_query.ok() {
-            let mut map = build_node_binding_to_log_odds_data_map(&query.message.knowledge_graph);
+            let mut map = build_node_binding_to_log_odds_data_map(query.message.clone());
             map.iter().for_each(|(k, v)| println!("k: {:?}, values: {:?}", k, v));
         }
         assert!(true);
@@ -378,7 +378,7 @@ mod test {
         // let data = fs::read_to_string("/tmp/response_1683229618787.json").unwrap();
         let potential_query: Result<Query> = serde_json::from_str(data.as_str());
         if let Some(mut query) = potential_query.ok() {
-            let mut map = build_node_binding_to_log_odds_data_map(&query.message.knowledge_graph);
+            let mut map = build_node_binding_to_log_odds_data_map(query.message.clone());
             // map.iter().for_each(|(k, v)| println!("k: {:?}, values: {:?}", k, v));
 
             // icees-kg: log_odds_ratio = OR1
