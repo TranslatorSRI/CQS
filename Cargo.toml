@@ -1,6 +1,6 @@
 [package]
 name = "cqs-rs"
-version = "0.2.3"
+version = "0.2.4"
 authors = ["Jason Reilly <jdr0887@gmail.com>"]
 edition = "2021"
 keywords = ["ARA", "curated", "query", "service"]
