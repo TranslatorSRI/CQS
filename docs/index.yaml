@@ -2,7 +2,16 @@ apiVersion: v1
 entries:
   cqs:
   - apiVersion: v2
-    created: "2023-11-30T15:33:16.920570128-05:00"
+    created: "2023-12-01T12:42:22.404846395-05:00"
+    description: A Helm chart for Kubernetes
+    digest: 7487ac82d1cfca6adf58b66ca80cae83c75a51ace4e4de157c814e7223a234c7
+    name: cqs
+    type: application
+    urls:
+    - https://translatorsri.github.io/CQS/cqs-0.2.5.tgz
+    version: 0.2.5
+  - apiVersion: v2
+    created: "2023-12-01T12:42:22.404325268-05:00"
     description: A Helm chart for Kubernetes
     digest: 0ae2ab634c03ca8600c1e44fdd7f158ee350894cca3c5b49fcaf902289148d74
     name: cqs
@@ -11,7 +20,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.4.tgz
     version: 0.2.4
   - apiVersion: v2
-    created: "2023-11-30T15:33:16.919933652-05:00"
+    created: "2023-12-01T12:42:22.403523376-05:00"
     description: A Helm chart for Kubernetes
     digest: 451069553a45fd38ecf5f3bb0009e60dcd42283ef963be1785872de8932c5bc4
     name: cqs
@@ -20,7 +29,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.3.tgz
     version: 0.2.3
   - apiVersion: v2
-    created: "2023-11-30T15:33:16.918070969-05:00"
+    created: "2023-12-01T12:42:22.402708964-05:00"
     description: A Helm chart for Kubernetes
     digest: 7867f73c7fe80e1296569eb4e3688d88e8eec3843c3d4b33967857cbc3fb3583
     name: cqs
@@ -29,7 +38,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.2.tgz
     version: 0.2.2
   - apiVersion: v2
-    created: "2023-11-30T15:33:16.917436939-05:00"
+    created: "2023-12-01T12:42:22.402044158-05:00"
     description: A Helm chart for Kubernetes
     digest: 5efd05ca5119a118a28edefc8253740e3b3e45fa33778dd8fcf7f0300f753ca8
     name: cqs
@@ -38,7 +47,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.1.tgz
     version: 0.2.1
   - apiVersion: v2
-    created: "2023-11-30T15:33:16.916789547-05:00"
+    created: "2023-12-01T12:42:22.401450872-05:00"
     description: A Helm chart for Kubernetes
     digest: 32003b80c0b54a4bd635c960e2170d29ef3d61c3732d0c70143a7dd7b1203ce7
     name: cqs
@@ -46,4 +55,4 @@ entries:
     urls:
     - https://translatorsri.github.io/CQS/cqs-0.2.0.tgz
     version: 0.2.0
-generated: "2023-11-30T15:33:16.915998953-05:00"
+generated: "2023-12-01T12:42:22.399466281-05:00"
