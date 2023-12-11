@@ -1,17 +1,4 @@
 {
-  "workflow": [
-    {
-      "id": "lookup",
-      "runner_parameters": {
-        "allowlist": [
-          "infores:aragorn"
-        ]
-      }
-    },
-    {
-      "id": "score"
-    }
-  ],
   "message": {
     "query_graph": {
       "edges": {
@@ -33,12 +20,12 @@
           "subject": "n1",
           "object": "n2",
           "predicates": [
-            "biolink:affects",
-            "biolink:physically_interacts_with"
+            "biolink:affects_activity_of",
+            "biolink:interacts_with"
           ],
           "provided_by": {
             "allowlist": [
-              "infores:text-mining-provider-targeted",
+              "infores:text-mining-kp",
               "infores:molepro"
             ]
           }
@@ -47,15 +34,9 @@
           "subject": "n3",
           "object": "n2",
           "predicates": [
-            "biolink:affects",
-            "biolink:physically_interacts_with"
-          ],
-          "provided_by": {
-            "allowlist": [
-              "infores:text-mining-provider-targeted",
-              "infores:molepro"
-            ]
-          }
+            "biolink:affects_activity_of",
+            "biolink:interacts_with"
+          ]
         },
         "e3": {
           "subject": "n2",
@@ -89,11 +70,22 @@
         },
         "n3": {
           "categories": [
-            "biolink:ChemicalEntity"
+            "biolink:Drug"
           ],
           "is_set": false
         }
       }
     }
-  }
+  },
+  "workflow": [
+    {
+      "id": "lookup",
+      "runner_parameters": {
+        "allowlist": ["infores:aragorn"]
+      }
+    },
+    {
+      "id":"score"
+    }
+  ]
 }
