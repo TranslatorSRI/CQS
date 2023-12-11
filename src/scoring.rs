@@ -29,11 +29,16 @@ pub fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f6
 pub trait CQSQuery: Send + Sync {
     fn name(&self) -> String;
     fn query(&self, curie_token: &str) -> Query;
+    fn inferred_drug_node_id(&self) -> String;
+    fn inferred_predicate_id(&self) -> String;
+    fn inferred_disease_node_id(&self) -> String;
+    fn template_drug_node_id(&self) -> String;
+    fn template_disease_node_id(&self) -> String;
     fn compute_score(&self, entry_values: &Vec<CQSCompositeScoreValue>) -> f64;
 }
 
 macro_rules! impl_wrapper {
-    ($foo:ident, $bar:literal, $func:expr) => {
+    ($foo:ident, $bar:literal, $inferred_drug_node_id:literal, $inferred_predicate_id:literal, $inferred_disease_node_id:literal, $template_drug_node_id:literal, $template_disease_node_id:literal, $func:expr) => {
         pub struct $foo {}
 
         impl $foo {
@@ -45,6 +50,26 @@ macro_rules! impl_wrapper {
         impl CQSQuery for $foo {
             fn name(&self) -> String {
                 $bar.to_string()
+            }
+
+            fn inferred_drug_node_id(&self) -> String {
+                $inferred_drug_node_id.to_string()
+            }
+
+            fn inferred_predicate_id(&self) -> String {
+                $inferred_predicate_id.to_string()
+            }
+
+            fn inferred_disease_node_id(&self) -> String {
+                $inferred_disease_node_id.to_string()
+            }
+
+            fn template_drug_node_id(&self) -> String {
+                $template_drug_node_id.to_string()
+            }
+
+            fn template_disease_node_id(&self) -> String {
+                $template_disease_node_id.to_string()
             }
 
             fn query(&self, curie_token: &str) -> Query {
@@ -63,8 +88,8 @@ macro_rules! impl_wrapper {
     };
 }
 
-impl_wrapper!(CQSQueryA, "a", compute_composite_score);
-impl_wrapper!(CQSQueryB, "b", compute_composite_score);
-impl_wrapper!(CQSQueryC, "c", compute_composite_score);
-impl_wrapper!(CQSQueryD, "d", compute_composite_score);
-impl_wrapper!(CQSQueryE, "e", compute_composite_score);
+impl_wrapper!(CQSQueryA, "a", "n0", "e0", "n1", "n3", "n0", compute_composite_score);
+impl_wrapper!(CQSQueryB, "b", "n0", "e0", "n1", "n3", "n0", compute_composite_score);
+impl_wrapper!(CQSQueryC, "c", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
+impl_wrapper!(CQSQueryD, "d", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
+impl_wrapper!(CQSQueryE, "e", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
