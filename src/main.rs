@@ -126,6 +126,8 @@ async fn query(data: Json<Query>, reqwest_client: &State<reqwest::Client>) -> Js
         message.merge(r.message);
     });
 
+    util::sort_results_by_score(&mut message);
+
     // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
     //
     // let mut ret = trapi_model_rs::Response::new(util::add_composite_score_attributes(message, node_binding_to_log_odds_map));
@@ -307,7 +309,8 @@ pub fn create_server() -> Rocket<Build> {
 async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, curie_token: &str, reqwest_client: &reqwest::Client) -> Option<trapi_model_rs::Response> {
     info!("PROCESSING CQS QUERY: {}", cqs_query.name());
     let canned_query: Query = cqs_query.query(curie_token);
-    let canned_query_response = util::post_query_to_workflow_runner(&reqwest_client, &canned_query).await.unwrap();
+    let mut canned_query_response = util::post_query_to_workflow_runner(&reqwest_client, &canned_query).await.unwrap();
+    util::add_support_graphs(&mut canned_query_response, cqs_query);
     Some(canned_query_response)
     // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(canned_query_response.message.clone());
     // let trapi_response = util::add_composite_score_attributes(canned_query_response, node_binding_to_log_odds_map, &cqs_query);

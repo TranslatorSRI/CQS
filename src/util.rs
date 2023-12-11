@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 use std::{env, error, fs};
-use trapi_model_rs::{Analysis, Attribute, EdgeBinding, Message, Query, ResourceRoleEnum, Response};
+use trapi_model_rs::{Analysis, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, Message, NodeBinding, Query, ResourceRoleEnum, Response, RetrievalSource};
 
 pub fn build_node_binding_to_log_odds_data_map(message: Message) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
     let mut map = HashMap::new();
@@ -196,6 +196,107 @@ pub fn add_composite_score_attributes(
     response
 }
 
+pub fn sort_results_by_score(message: &mut Message) {
+    match &mut message.results {
+        None => {}
+        Some(results) => {
+            results.sort_by(|a, b| {
+                if let (Some(a_analysis), Some(b_analysis)) = (a.analyses.iter().next(), b.analyses.iter().next()) {
+                    if let (Some(a_score), Some(b_score)) = (a_analysis.score, b_analysis.score) {
+                        return if b_score < a_score {
+                            Ordering::Less
+                        } else if b_score > a_score {
+                            Ordering::Greater
+                        } else {
+                            b_score.partial_cmp(&a_score).unwrap_or(Ordering::Equal)
+                        };
+                    }
+                }
+                return Ordering::Less;
+            });
+        }
+    }
+}
+
+pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::CQSQuery>) {
+    let mut new_results: Vec<trapi_model_rs::Result> = vec![];
+    let mut auxiliary_graphs: HashMap<String, AuxiliaryGraph> = HashMap::new();
+
+    if let Some(results) = &mut response.message.results {
+        for result in results {
+            let mut new_node_bindings: HashMap<String, Vec<NodeBinding>> = HashMap::new();
+
+            if let Some((disease_node_binding_key, disease_node_binding_value)) = result.node_bindings.iter().find(|(k, v)| **k == cqs_query.template_disease_node_id()) {
+                // println!("disease_node_binding_value: {:?}", disease_node_binding_value);
+                new_node_bindings.insert(cqs_query.inferred_disease_node_id(), disease_node_binding_value.to_vec());
+            }
+
+            if let Some((drug_node_binding_key, drug_node_binding_value)) = result.node_bindings.iter().find(|(k, v)| **k == cqs_query.template_drug_node_id()) {
+                // println!("drug_node_binding_value: {:?}", drug_node_binding_value);
+                new_node_bindings.insert(cqs_query.inferred_drug_node_id(), drug_node_binding_value.to_vec());
+            }
+
+            // let mut new_analyses = result.analyses.clone();
+
+            let mut local_auxiliary_graphs: HashMap<String, AuxiliaryGraph> = HashMap::new();
+            result.analyses.iter().for_each(|analysis| {
+                // analysis.edge_bindings.remove()
+                let eb_ids: Vec<String> = analysis
+                    .edge_bindings
+                    .iter()
+                    .map(|(k, v)| v.iter().map(|eb| eb.id.clone()).collect::<Vec<String>>())
+                    .flatten()
+                    .collect();
+                let ag = AuxiliaryGraph::new(eb_ids);
+
+                let auxiliary_graph_id = uuid::Uuid::new_v4().to_string();
+                local_auxiliary_graphs.insert(auxiliary_graph_id, ag);
+            });
+
+            match (
+                new_node_bindings.get(&cqs_query.inferred_drug_node_id()),
+                new_node_bindings.get(&cqs_query.inferred_disease_node_id()),
+            ) {
+                (Some(drug_node_ids), Some(disease_node_ids)) => {
+                    // println!("drug_node_ids: {:?}", drug_node_ids);
+                    // println!("disease_node_ids: {:?}", disease_node_ids);
+
+                    match (drug_node_ids.first(), disease_node_ids.first()) {
+                        (Some(first_drug_node_id), Some(first_disease_node_id)) => {
+                            let auxiliary_graph_ids: Vec<_> = local_auxiliary_graphs.clone().into_keys().collect();
+                            let mut new_edge = trapi_model_rs::Edge::new(
+                                first_drug_node_id.id.clone(),
+                                BiolinkPredicate::from("biolink:treats"),
+                                first_disease_node_id.id.clone(),
+                                vec![RetrievalSource::new("infores:cqs".to_string(), ResourceRoleEnum::PrimaryKnowledgeSource)],
+                            );
+                            new_edge.attributes = Some(vec![Attribute::new("biolink:support_graphs".to_string(), serde_json::Value::from(auxiliary_graph_ids))]);
+                            println!("new_edge: {:?}", new_edge);
+                            if let Some(kg) = &mut response.message.knowledge_graph {
+                                let new_kg_edge_id = uuid::Uuid::new_v4().to_string();
+                                kg.edges.insert(new_kg_edge_id.clone(), new_edge);
+                                result.analyses.iter_mut().for_each(|analysis| {
+                                    analysis.edge_bindings.clear();
+                                    analysis
+                                        .edge_bindings
+                                        .insert(cqs_query.inferred_predicate_id(), vec![EdgeBinding::new(new_kg_edge_id.clone())]);
+                                });
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+            result.node_bindings = new_node_bindings;
+
+            auxiliary_graphs.extend(local_auxiliary_graphs.into_iter());
+        }
+        response.message.auxiliary_graphs = Some(auxiliary_graphs);
+    }
+}
+
+// analysis.edge_bindings.iter().flat_map(|(k, v)| v.iter().map(|eb| eb.id).collect())
 pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &Query) -> Result<trapi_model_rs::Response, Box<dyn error::Error + Send + Sync>> {
     let workflow_runner_url = format!(
         "{}/query",
@@ -208,11 +309,11 @@ pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &Que
             debug!("response.status(): {}", response.status());
             let data = response.text().await?;
             let trapi_response: trapi_model_rs::Response = serde_json::from_str(data.as_str()).expect("could not parse Query");
-            // fs::write(
-            //     Path::new(format!("/tmp/cqs/{}.json", uuid::Uuid::new_v4().to_string()).as_str()),
-            //     serde_json::to_string_pretty(&trapi_response).unwrap(),
-            // )
-            // .expect("failed to write output");
+            fs::write(
+                Path::new(format!("/tmp/cqs/{}.json", uuid::Uuid::new_v4().to_string()).as_str()),
+                serde_json::to_string_pretty(&trapi_response).unwrap(),
+            )
+            .expect("failed to write output");
             Ok(trapi_response)
         }
         Err(e) => Err(Box::new(e)),
@@ -234,15 +335,19 @@ pub fn build_http_client() -> reqwest::Client {
 #[cfg(test)]
 mod test {
     use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
-    use crate::scoring::{CQSQuery, CQSQueryA, CQSQueryD};
+    use crate::scoring::{CQSQuery, CQSQueryA, CQSQueryB, CQSQueryD};
     use crate::util;
-    use crate::util::build_node_binding_to_log_odds_data_map;
+    use crate::util::{add_support_graphs, build_node_binding_to_log_odds_data_map};
     use itertools::Itertools;
+    use petgraph::graph::NodeIndex;
+    use petgraph::Direction;
     use serde_json::Result;
     use std::cmp::Ordering;
     use std::collections::HashMap;
     use std::fs;
-    use trapi_model_rs::{Analysis, EdgeBinding, Query};
+    use std::path::Path;
+    use trapi_model_rs::{Analysis, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, NodeBinding, Query, ResourceRoleEnum, Response, RetrievalSource};
+    use uuid::uuid;
 
     #[test]
     #[ignore]
@@ -288,6 +393,92 @@ mod test {
         // }
 
         assert!(true);
+    }
+
+    #[test]
+    fn test_scratch() {
+        // let data = fs::read_to_string(Path::new("/tmp/cqs/0df3b8e7-bc53-4d24-b89e-c16b883efbf6.json")).unwrap();
+        // let data = fs::read_to_string(Path::new("/tmp/cqs/31f9eb8e-ad7f-4b9f-b828-fe658d6d4a2e.json")).unwrap();
+        let data = fs::read_to_string(Path::new("/tmp/cqs/f6010434-7a51-4acb-ae26-e4a36692c451.json")).unwrap();
+        let mut response: Response = serde_json::from_str(data.as_str()).unwrap();
+
+        let cqs_query = CQSQueryB::new();
+        let mut new_results: Vec<trapi_model_rs::Result> = vec![];
+        let mut auxiliary_graphs: HashMap<String, AuxiliaryGraph> = HashMap::new();
+
+        if let Some(results) = &mut response.message.results {
+            for result in results {
+                let mut new_node_bindings: HashMap<String, Vec<NodeBinding>> = HashMap::new();
+
+                if let Some((disease_node_binding_key, disease_node_binding_value)) = result.node_bindings.iter().find(|(k, v)| **k == cqs_query.template_disease_node_id()) {
+                    // println!("disease_node_binding_value: {:?}", disease_node_binding_value);
+                    new_node_bindings.insert(cqs_query.inferred_disease_node_id(), disease_node_binding_value.to_vec());
+                }
+
+                if let Some((drug_node_binding_key, drug_node_binding_value)) = result.node_bindings.iter().find(|(k, v)| **k == cqs_query.template_drug_node_id()) {
+                    // println!("drug_node_binding_value: {:?}", drug_node_binding_value);
+                    new_node_bindings.insert(cqs_query.inferred_drug_node_id(), drug_node_binding_value.to_vec());
+                }
+
+                // let mut new_analyses = result.analyses.clone();
+
+                let mut local_auxiliary_graphs: HashMap<String, AuxiliaryGraph> = HashMap::new();
+                result.analyses.iter().for_each(|analysis| {
+                    // analysis.edge_bindings.remove()
+                    let eb_ids: Vec<String> = analysis
+                        .edge_bindings
+                        .iter()
+                        .map(|(k, v)| v.iter().map(|eb| eb.id.clone()).collect::<Vec<String>>())
+                        .flatten()
+                        .collect();
+                    let ag = AuxiliaryGraph::new(eb_ids);
+
+                    let auxiliary_graph_id = uuid::Uuid::new_v4().to_string();
+                    local_auxiliary_graphs.insert(auxiliary_graph_id, ag);
+                });
+
+                match (
+                    new_node_bindings.get(&cqs_query.inferred_drug_node_id()),
+                    new_node_bindings.get(&cqs_query.inferred_disease_node_id()),
+                ) {
+                    (Some(drug_node_ids), Some(disease_node_ids)) => {
+                        // println!("drug_node_ids: {:?}", drug_node_ids);
+                        // println!("disease_node_ids: {:?}", disease_node_ids);
+
+                        match (drug_node_ids.first(), disease_node_ids.first()) {
+                            (Some(first_drug_node_id), Some(first_disease_node_id)) => {
+                                let auxiliary_graph_ids: Vec<_> = local_auxiliary_graphs.clone().into_keys().collect();
+                                let mut new_edge = trapi_model_rs::Edge::new(
+                                    first_drug_node_id.id.clone(),
+                                    BiolinkPredicate::from("biolink:treats"),
+                                    first_disease_node_id.id.clone(),
+                                    vec![RetrievalSource::new("infores:cqs".to_string(), ResourceRoleEnum::PrimaryKnowledgeSource)],
+                                );
+                                new_edge.attributes = Some(vec![Attribute::new("biolink:support_graphs".to_string(), serde_json::Value::from(auxiliary_graph_ids))]);
+                                println!("new_edge: {:?}", new_edge);
+                                if let Some(kg) = &mut response.message.knowledge_graph {
+                                    let new_kg_edge_id = uuid::Uuid::new_v4().to_string();
+                                    kg.edges.insert(new_kg_edge_id.clone(), new_edge);
+                                    result.analyses.iter_mut().for_each(|analysis| {
+                                        analysis.edge_bindings.clear();
+                                        analysis
+                                            .edge_bindings
+                                            .insert(cqs_query.inferred_predicate_id(), vec![EdgeBinding::new(new_kg_edge_id.clone())]);
+                                    });
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+                result.node_bindings = new_node_bindings;
+
+                auxiliary_graphs.extend(local_auxiliary_graphs.into_iter());
+            }
+            response.message.auxiliary_graphs = Some(auxiliary_graphs);
+        }
+        fs::write("/tmp/response.pretty.json", serde_json::to_string_pretty(&response).unwrap()).unwrap();
     }
 
     #[test]
