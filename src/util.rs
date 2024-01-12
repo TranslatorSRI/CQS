@@ -1,5 +1,7 @@
 use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
 use crate::scoring;
+use itertools::Itertools;
+use ordered_float::OrderedFloat;
 use reqwest::header;
 use reqwest::redirect::Policy;
 use std::cmp::Ordering;
@@ -196,25 +198,43 @@ pub fn add_composite_score_attributes(
     response
 }
 
-pub fn sort_results_by_score(message: &mut Message) {
-    match &mut message.results {
-        None => {}
-        Some(results) => {
-            results.sort_by(|a, b| {
-                if let (Some(a_analysis), Some(b_analysis)) = (a.analyses.iter().next(), b.analyses.iter().next()) {
-                    if let (Some(a_score), Some(b_score)) = (a_analysis.score, b_analysis.score) {
-                        return if b_score < a_score {
-                            Ordering::Less
-                        } else if b_score > a_score {
-                            Ordering::Greater
-                        } else {
-                            b_score.partial_cmp(&a_score).unwrap_or(Ordering::Equal)
-                        };
-                    }
+pub fn sort_analysis_by_score(message: &mut Message) {
+    if let Some(results) = &mut message.results {
+        // 1st sort Analyses
+        results.iter_mut().for_each(|a| {
+            a.analyses.sort_by(|aa, ba| {
+                if let (Some(a_score), Some(b_score)) = (aa.score, ba.score) {
+                    return if b_score < a_score {
+                        Ordering::Less
+                    } else if b_score > a_score {
+                        Ordering::Greater
+                    } else {
+                        b_score.partial_cmp(&a_score).unwrap_or(Ordering::Equal)
+                    };
                 }
                 return Ordering::Less;
             });
-        }
+        });
+    }
+}
+
+pub fn sort_results_by_analysis_score(message: &mut Message) {
+    if let Some(results) = &mut message.results {
+        // 2nd sort Results by 1st Analysis
+        results.sort_by(|a, b| {
+            if let (Some(aa), Some(ab)) = (a.analyses.iter().next(), b.analyses.iter().next()) {
+                if let (Some(a_score), Some(b_score)) = (aa.score, ab.score) {
+                    return if b_score < a_score {
+                        Ordering::Less
+                    } else if b_score > a_score {
+                        Ordering::Greater
+                    } else {
+                        b_score.partial_cmp(&a_score).unwrap_or(Ordering::Equal)
+                    };
+                }
+            }
+            return Ordering::Less;
+        });
     }
 }
 
@@ -236,11 +256,8 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::
                 new_node_bindings.insert(cqs_query.inferred_drug_node_id(), drug_node_binding_value.to_vec());
             }
 
-            // let mut new_analyses = result.analyses.clone();
-
             let mut local_auxiliary_graphs: HashMap<String, AuxiliaryGraph> = HashMap::new();
             result.analyses.iter().for_each(|analysis| {
-                // analysis.edge_bindings.remove()
                 let eb_ids: Vec<String> = analysis
                     .edge_bindings
                     .iter()
@@ -248,7 +265,6 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::
                     .flatten()
                     .collect();
                 let ag = AuxiliaryGraph::new(eb_ids);
-
                 let auxiliary_graph_id = uuid::Uuid::new_v4().to_string();
                 local_auxiliary_graphs.insert(auxiliary_graph_id, ag);
             });
@@ -275,6 +291,7 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::
                             if let Some(kg) = &mut response.message.knowledge_graph {
                                 let new_kg_edge_id = uuid::Uuid::new_v4().to_string();
                                 kg.edges.insert(new_kg_edge_id.clone(), new_edge);
+                                result.analyses.retain(|analysis| analysis.edge_bindings.iter().all(|(k, v)| !v.is_empty()));
                                 result.analyses.iter_mut().for_each(|analysis| {
                                     analysis.edge_bindings.clear();
                                     analysis
@@ -292,8 +309,64 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::
 
             auxiliary_graphs.extend(local_auxiliary_graphs.into_iter());
         }
+
         response.message.auxiliary_graphs = Some(auxiliary_graphs);
     }
+}
+
+pub fn group_results(message: &mut Message) {
+    let mut new_results: Vec<trapi_model_rs::Result> = vec![];
+
+    if let Some(results) = &mut message.results {
+        // 1st pass is to create unique vec of results
+        results
+            .iter()
+            .for_each(|result| match new_results.iter_mut().find(|nr| nr.node_bindings == result.node_bindings) {
+                None => {
+                    let mut new_result = result.clone();
+                    new_result.analyses.clear();
+                    new_results.push(new_result);
+                }
+                Some(found_result) => {}
+            });
+
+        // 2nd pass is to add analyses
+        for result in new_results.iter_mut() {
+            let analyses: Vec<_> = results
+                .iter()
+                .filter(|orig| result.node_bindings == orig.node_bindings)
+                .flat_map(|r| r.analyses.clone())
+                .collect();
+
+            let asdf = analyses.into_iter().map(|a| ((a.resource_id.clone(), OrderedFloat(a.score.unwrap())), a)).into_group_map();
+
+            for ((resource_id, score), v) in asdf.into_iter() {
+                match v.len() {
+                    1 => {
+                        result.analyses.extend(v);
+                    }
+                    _ => {
+                        let edge_binding_map = v
+                            .iter()
+                            .flat_map(|a| {
+                                a.edge_bindings
+                                    .iter()
+                                    .flat_map(|(eb_key, eb_value)| eb_value.iter().map(|eb| (eb_key.clone(), eb.clone())).collect::<Vec<_>>())
+                                    .collect::<Vec<_>>()
+                            })
+                            .into_group_map();
+
+                        if let Some(analysis) = v.iter().next() {
+                            let mut a = analysis.clone();
+                            a.edge_bindings = edge_binding_map;
+                            result.analyses.push(a);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    message.results = Some(new_results);
 }
 
 // analysis.edge_bindings.iter().flat_map(|(k, v)| v.iter().map(|eb| eb.id).collect())
@@ -309,11 +382,11 @@ pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &Que
             debug!("response.status(): {}", response.status());
             let data = response.text().await?;
             let trapi_response: trapi_model_rs::Response = serde_json::from_str(data.as_str()).expect("could not parse Query");
-            fs::write(
-                Path::new(format!("/tmp/cqs/{}.json", uuid::Uuid::new_v4().to_string()).as_str()),
-                serde_json::to_string_pretty(&trapi_response).unwrap(),
-            )
-            .expect("failed to write output");
+            // fs::write(
+            //     Path::new(format!("/tmp/cqs/{}.json", uuid::Uuid::new_v4().to_string()).as_str()),
+            //     serde_json::to_string_pretty(&trapi_response).unwrap(),
+            // )
+            // .expect("failed to write output");
             Ok(trapi_response)
         }
         Err(e) => Err(Box::new(e)),
@@ -338,13 +411,15 @@ mod test {
     use crate::scoring::{CQSQuery, CQSQueryA, CQSQueryB, CQSQueryD};
     use crate::util;
     use crate::util::{add_support_graphs, build_node_binding_to_log_odds_data_map};
+    use hyper::body::HttpBody;
     use itertools::Itertools;
-    use petgraph::graph::NodeIndex;
-    use petgraph::Direction;
+    use merge_hashmap::Merge;
+    use ordered_float::OrderedFloat;
     use serde_json::Result;
     use std::cmp::Ordering;
     use std::collections::HashMap;
     use std::fs;
+    use std::ops::Deref;
     use std::path::Path;
     use trapi_model_rs::{Analysis, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, NodeBinding, Query, ResourceRoleEnum, Response, RetrievalSource};
     use uuid::uuid;
@@ -397,18 +472,21 @@ mod test {
 
     #[test]
     fn test_scratch() {
-        // let data = fs::read_to_string(Path::new("/tmp/cqs/0df3b8e7-bc53-4d24-b89e-c16b883efbf6.json")).unwrap();
-        // let data = fs::read_to_string(Path::new("/tmp/cqs/31f9eb8e-ad7f-4b9f-b828-fe658d6d4a2e.json")).unwrap();
-        let data = fs::read_to_string(Path::new("/tmp/cqs/f6010434-7a51-4acb-ae26-e4a36692c451.json")).unwrap();
+        let data = fs::read_to_string(Path::new("/tmp/cqs/a3522bf3-6c73-4ed4-98f4-aada6746ed1d.json")).unwrap();
+        // let data = fs::read_to_string(Path::new("/tmp/cqs/fa62acca-ce27-4b7d-8d84-22ab4906bdcc.json")).unwrap();
+
         let mut response: Response = serde_json::from_str(data.as_str()).unwrap();
 
-        let cqs_query = CQSQueryB::new();
+        let cqs_query = CQSQueryA::new();
         let mut new_results: Vec<trapi_model_rs::Result> = vec![];
         let mut auxiliary_graphs: HashMap<String, AuxiliaryGraph> = HashMap::new();
 
         if let Some(results) = &mut response.message.results {
             for result in results {
                 let mut new_node_bindings: HashMap<String, Vec<NodeBinding>> = HashMap::new();
+
+                // ($foo:ident, $bar:literal, $inferred_drug_node_id:literal, $inferred_predicate_id:literal, $inferred_disease_node_id:literal, $template_drug_node_id:literal, $template_disease_node_id:literal, $func:expr) => {
+                // crate::impl_wrapper!(CQSQueryA, "a", "n0", "e0", "n1", "n3", "n0", compute_composite_score);
 
                 if let Some((disease_node_binding_key, disease_node_binding_value)) = result.node_bindings.iter().find(|(k, v)| **k == cqs_query.template_disease_node_id()) {
                     // println!("disease_node_binding_value: {:?}", disease_node_binding_value);
@@ -424,7 +502,6 @@ mod test {
 
                 let mut local_auxiliary_graphs: HashMap<String, AuxiliaryGraph> = HashMap::new();
                 result.analyses.iter().for_each(|analysis| {
-                    // analysis.edge_bindings.remove()
                     let eb_ids: Vec<String> = analysis
                         .edge_bindings
                         .iter()
@@ -432,7 +509,6 @@ mod test {
                         .flatten()
                         .collect();
                     let ag = AuxiliaryGraph::new(eb_ids);
-
                     let auxiliary_graph_id = uuid::Uuid::new_v4().to_string();
                     local_auxiliary_graphs.insert(auxiliary_graph_id, ag);
                 });
@@ -459,6 +535,8 @@ mod test {
                                 if let Some(kg) = &mut response.message.knowledge_graph {
                                     let new_kg_edge_id = uuid::Uuid::new_v4().to_string();
                                     kg.edges.insert(new_kg_edge_id.clone(), new_edge);
+                                    // TODO: this should be removed...added to filter out bug in either WFR or Aragorn
+                                    result.analyses.retain(|analysis| analysis.edge_bindings.iter().all(|(k, v)| !v.is_empty()));
                                     result.analyses.iter_mut().for_each(|analysis| {
                                         analysis.edge_bindings.clear();
                                         analysis
@@ -472,13 +550,119 @@ mod test {
                     }
                     _ => {}
                 }
+
                 result.node_bindings = new_node_bindings;
 
                 auxiliary_graphs.extend(local_auxiliary_graphs.into_iter());
             }
+
+            // if let Some(results) = &mut response.message.results {
+            //     let tmp_results = results.clone();
+            //     for result in results {
+            //         let tmp: Vec<_> = tmp_results.iter().filter(|tmp_result| tmp_result.node_bindings == result.node_bindings).collect();
+            //
+            //         tmp.iter().map(|r| r.analyses).map(|a| a.iter().map(|b| b.edge_bindings)).collect();
+            //     }
+            // }
+            // .iter()
+            // .map(|a| a.edge_bindings.iter().map(|(k, v)| v.iter().map(|eb| eb.id.clone())).collect::<Vec<String>>())
+            // .collect()
+
+            let mut new_results: Vec<trapi_model_rs::Result> = vec![];
+
+            if let Some(results) = &mut response.message.results {
+                // first pass is to create unique vec of results
+                results
+                    .iter()
+                    .for_each(|result| match new_results.iter_mut().find(|nr| nr.node_bindings == result.node_bindings) {
+                        None => {
+                            let mut new_result = result.clone();
+                            new_result.analyses.clear();
+                            new_results.push(new_result);
+                        }
+                        Some(found_result) => {}
+                    });
+                // [
+                // [Analysis { resource_id: "infores:aragorn", score: Some(0.6528858213265621), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "27c3fad9-8381-420b-995f-1b6eeff6ba96", attributes: None }]}, attributes: None }],
+                // [Analysis { resource_id: "infores:aragorn", score: Some(0.7305575193846134), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "3d35e46a-caee-41d6-99f6-6d27230df3ba", attributes: None }]}, attributes: None }],
+                // [Analysis { resource_id: "infores:aragorn", score: Some(0.7305575193846134), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "6baae381-a426-49c7-beb4-9deaa107ef25", attributes: None }]}, attributes: None }],
+                // [Analysis { resource_id: "infores:aragorn", score: Some(0.781241807653375), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "5e3ea8bc-6071-4754-be2a-005b5107e059", attributes: None }]}, attributes: None }],
+                // [Analysis { resource_id: "infores:aragorn", score: Some(0.801544486430907), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "f7251cbc-2729-4a7b-8b9c-82afe84432f0", attributes: None }]}, attributes: None }],
+                // [Analysis { resource_id: "infores:aragorn", score: Some(0.8173595282117875), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "6637babd-1cac-41e8-a2ca-198869a9aafb", attributes: None }]}, attributes: None }],
+                // [Analysis { resource_id: "infores:aragorn", score: Some(0.8178765918805924), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "3edb20e5-3a82-4f71-a655-39e58636ffd9", attributes: None }]}, attributes: None }]
+                // ]
+
+                // {
+                //     ("infores:aragorn", OrderedFloat(0.801544486430907)): [Analysis { resource_id: "infores:aragorn", score: Some(0.801544486430907), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "cdf1c0d1-992d-4300-b7f3-3bd5a0b283ae", attributes: None }]}, attributes: None }],
+                //     ("infores:aragorn", OrderedFloat(0.8173595282117875)): [Analysis { resource_id: "infores:aragorn", score: Some(0.8173595282117875), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "7f43acbc-2dbf-43a1-b278-4d38aff0dbba", attributes: None }]}, attributes: None }],
+                //     ("infores:aragorn", OrderedFloat(0.6528858213265621)): [Analysis { resource_id: "infores:aragorn", score: Some(0.6528858213265621), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "3fdc1246-6103-457b-bf34-01fa0997ecbf", attributes: None }]}, attributes: None }],
+                //     ("infores:aragorn", OrderedFloat(0.781241807653375)): [Analysis { resource_id: "infores:aragorn", score: Some(0.781241807653375), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "298feefe-d958-47da-a16e-1448f801c141", attributes: None }]}, attributes: None }],
+                //     ("infores:aragorn", OrderedFloat(0.8178765918805924)): [Analysis { resource_id: "infores:aragorn", score: Some(0.8178765918805924), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "011f521e-e670-4067-b6b5-6b2954256b3b", attributes: None }]}, attributes: None }],
+                //     ("infores:aragorn", OrderedFloat(0.7305575193846134)): [
+                //         Analysis { resource_id: "infores:aragorn", score: Some(0.7305575193846134), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "71b47f68-c204-428f-98c1-4f0a4cd6d8ce", attributes: None }]}, attributes: None },
+                //         Analysis { resource_id: "infores:aragorn", score: Some(0.7305575193846134), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "df7dc838-4684-42b4-9521-4710328d005e", attributes: None }]}, attributes: None }
+                //     ]
+                // }
+
+                // 2nd pass is to add analyses
+                for result in new_results.iter_mut() {
+                    let analyses: Vec<_> = results
+                        .iter()
+                        .filter(|orig| result.node_bindings == orig.node_bindings)
+                        .flat_map(|r| r.analyses.clone())
+                        .collect();
+
+                    let asdf = analyses.into_iter().map(|a| ((a.resource_id.clone(), OrderedFloat(a.score.unwrap())), a)).into_group_map();
+
+                    for ((resource_id, score), v) in asdf.into_iter() {
+                        match v.len() {
+                            1 => {
+                                result.analyses.extend(v);
+                            }
+                            _ => {
+                                let edge_binding_map = v
+                                    .iter()
+                                    .flat_map(|a| {
+                                        a.edge_bindings
+                                            .iter()
+                                            .flat_map(|(eb_key, eb_value)| eb_value.iter().map(|eb| (eb_key.clone(), eb.clone())).collect::<Vec<_>>())
+                                            .collect::<Vec<_>>()
+                                    })
+                                    .into_group_map();
+
+                                if let Some(analysis) = v.iter().next() {
+                                    let mut a = analysis.clone();
+                                    a.edge_bindings = edge_binding_map;
+                                    result.analyses.push(a);
+                                }
+                            }
+                        }
+                    }
+
+                    // println!("{:?}", asdf);
+
+                    //     for found_analysis in found_result.analyses.iter_mut() {
+                    //         let eb_ids: Vec<String> = found_analysis
+                    //             .edge_bindings
+                    //             .iter()
+                    //             .map(|(k, v)| v.iter().map(|eb| eb.id.clone()).collect::<Vec<String>>())
+                    //             .flatten()
+                    //             .collect();
+                    //         if original_analysis.resource_id == found_analysis.resource_id && .all(|v| v.contains()){
+                    //
+                    //         }
+                    //     }
+                    // }
+                    //
+                    // found_result.analyses.
+                    // }
+                }
+            }
+            response.message.results = Some(new_results);
+
             response.message.auxiliary_graphs = Some(auxiliary_graphs);
         }
-        fs::write("/tmp/response.pretty.json", serde_json::to_string_pretty(&response).unwrap()).unwrap();
+        fs::write("/tmp/grouped_analyses_response.pretty.json", serde_json::to_string_pretty(&response).unwrap()).unwrap();
     }
 
     #[test]
@@ -516,7 +700,7 @@ mod test {
     // #[ignore]
     fn test_build_node_binding_to_log_odds_data_map() {
         let data = fs::read_to_string("/tmp/cqs/220373f2-7c16-40eb-8bd8-070adbfbc9ea.json").unwrap();
-        let potential_query: Result<Query> = serde_json::from_str(data.as_str());
+        let potential_query: serde_json::Result<Query> = serde_json::from_str(data.as_str());
         if let Some(mut query) = potential_query.ok() {
             let mut map = build_node_binding_to_log_odds_data_map(query.message.clone());
             map.iter().for_each(|(k, v)| println!("k: {:?}, values: {:?}", k, v));
@@ -567,7 +751,7 @@ mod test {
         // let data = fs::read_to_string("/tmp/message.pretty.json").unwrap();
         let data = fs::read_to_string("/tmp/asdf.pretty.json").unwrap();
         // let data = fs::read_to_string("/tmp/response_1683229618787.json").unwrap();
-        let potential_query: Result<Query> = serde_json::from_str(data.as_str());
+        let potential_query: serde_json::Result<Query> = serde_json::from_str(data.as_str());
         if let Some(mut query) = potential_query.ok() {
             let mut map = build_node_binding_to_log_odds_data_map(query.message.clone());
             // map.iter().for_each(|(k, v)| println!("k: {:?}, values: {:?}", k, v));
