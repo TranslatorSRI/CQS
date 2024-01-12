@@ -126,7 +126,9 @@ async fn query(data: Json<Query>, reqwest_client: &State<reqwest::Client>) -> Js
         message.merge(r.message);
     });
 
-    util::sort_results_by_score(&mut message);
+    util::group_results(&mut message);
+    util::sort_analysis_by_score(&mut message);
+    util::sort_results_by_analysis_score(&mut message);
 
     // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
     //
