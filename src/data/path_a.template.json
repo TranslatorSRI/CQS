@@ -1,4 +1,17 @@
 {
+  "workflow": [
+    {
+      "id": "lookup",
+      "runner_parameters": {
+        "allowlist": [
+          "infores:aragorn"
+        ]
+      }
+    },
+    {
+      "id": "score"
+    }
+  ],
   "message": {
     "query_graph": {
       "edges": {
@@ -12,7 +25,8 @@
           "provided_by": {
             "allowlist": [
               "infores:automat-icees-kg",
-              "infores:cohd"
+              "infores:cohd",
+              "infores:multiomics-ehr-risk-kp"
             ]
           }
         },
@@ -21,11 +35,11 @@
           "object": "n2",
           "predicates": [
             "biolink:affects_activity_of",
-            "biolink:interacts_with"
+            "biolink:physically_interacts_with"
           ],
           "provided_by": {
             "allowlist": [
-              "infores:text-mining-kp",
+              "infores:text-mining-provider-targeted",
               "infores:molepro"
             ]
           }
@@ -35,7 +49,7 @@
           "object": "n2",
           "predicates": [
             "biolink:affects_activity_of",
-            "biolink:interacts_with"
+            "biolink:physically_interacts_with"
           ]
         },
         "e3": {
@@ -76,16 +90,5 @@
         }
       }
     }
-  },
-  "workflow": [
-    {
-      "id": "lookup",
-      "runner_parameters": {
-        "allowlist": ["infores:aragorn"]
-      }
-    },
-    {
-      "id":"score"
-    }
-  ]
+  }
 }
