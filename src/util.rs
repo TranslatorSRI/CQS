@@ -6,11 +6,11 @@ use reqwest::header;
 use reqwest::redirect::Policy;
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::path::Path;
 use std::time::Duration;
-use std::{env, error, fs};
+use std::{env, error};
 use trapi_model_rs::{Analysis, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, Message, NodeBinding, Query, ResourceRoleEnum, Response, RetrievalSource};
 
+#[allow(dead_code)]
 pub fn build_node_binding_to_log_odds_data_map(message: Message) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
     let mut map = HashMap::new();
 
@@ -83,6 +83,7 @@ pub fn build_node_binding_to_log_odds_data_map(message: Message) -> HashMap<CQSC
     map
 }
 
+#[allow(dead_code)]
 pub fn add_composite_score_attributes(
     mut response: Response,
     node_binding_to_log_odds_map: HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>>,
@@ -239,19 +240,18 @@ pub fn sort_results_by_analysis_score(message: &mut Message) {
 }
 
 pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::CQSQuery>) {
-    let mut new_results: Vec<trapi_model_rs::Result> = vec![];
     let mut auxiliary_graphs: HashMap<String, AuxiliaryGraph> = HashMap::new();
 
     if let Some(results) = &mut response.message.results {
         for result in results {
             let mut new_node_bindings: HashMap<String, Vec<NodeBinding>> = HashMap::new();
 
-            if let Some((disease_node_binding_key, disease_node_binding_value)) = result.node_bindings.iter().find(|(k, v)| **k == cqs_query.template_disease_node_id()) {
+            if let Some((_disease_node_binding_key, disease_node_binding_value)) = result.node_bindings.iter().find(|(k, _v)| **k == cqs_query.template_disease_node_id()) {
                 // println!("disease_node_binding_value: {:?}", disease_node_binding_value);
                 new_node_bindings.insert(cqs_query.inferred_disease_node_id(), disease_node_binding_value.to_vec());
             }
 
-            if let Some((drug_node_binding_key, drug_node_binding_value)) = result.node_bindings.iter().find(|(k, v)| **k == cqs_query.template_drug_node_id()) {
+            if let Some((_drug_node_binding_key, drug_node_binding_value)) = result.node_bindings.iter().find(|(k, _v)| **k == cqs_query.template_drug_node_id()) {
                 // println!("drug_node_binding_value: {:?}", drug_node_binding_value);
                 new_node_bindings.insert(cqs_query.inferred_drug_node_id(), drug_node_binding_value.to_vec());
             }
@@ -261,7 +261,7 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::
                 let eb_ids: Vec<String> = analysis
                     .edge_bindings
                     .iter()
-                    .map(|(k, v)| v.iter().map(|eb| eb.id.clone()).collect::<Vec<String>>())
+                    .map(|(_k, v)| v.iter().map(|eb| eb.id.clone()).collect::<Vec<String>>())
                     .flatten()
                     .collect();
                 let ag = AuxiliaryGraph::new(eb_ids);
@@ -291,7 +291,7 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::
                             if let Some(kg) = &mut response.message.knowledge_graph {
                                 let new_kg_edge_id = uuid::Uuid::new_v4().to_string();
                                 kg.edges.insert(new_kg_edge_id.clone(), new_edge);
-                                result.analyses.retain(|analysis| analysis.edge_bindings.iter().all(|(k, v)| !v.is_empty()));
+                                result.analyses.retain(|analysis| analysis.edge_bindings.iter().all(|(_k, v)| !v.is_empty()));
                                 result.analyses.iter_mut().for_each(|analysis| {
                                     analysis.edge_bindings.clear();
                                     analysis
@@ -327,7 +327,7 @@ pub fn group_results(message: &mut Message) {
                     new_result.analyses.clear();
                     new_results.push(new_result);
                 }
-                Some(found_result) => {}
+                Some(_found_result) => {}
             });
 
         // 2nd pass is to add analyses
@@ -340,7 +340,7 @@ pub fn group_results(message: &mut Message) {
 
             let asdf = analyses.into_iter().map(|a| ((a.resource_id.clone(), OrderedFloat(a.score.unwrap())), a)).into_group_map();
 
-            for ((resource_id, score), v) in asdf.into_iter() {
+            for ((_resource_id, _score), v) in asdf.into_iter() {
                 match v.len() {
                     1 => {
                         result.analyses.extend(v);
@@ -382,8 +382,8 @@ pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &Que
             debug!("response.status(): {}", response.status());
             let data = response.text().await?;
             let trapi_response: trapi_model_rs::Response = serde_json::from_str(data.as_str()).expect("could not parse Query");
-            // fs::write(
-            //     Path::new(format!("/tmp/cqs/{}.json", uuid::Uuid::new_v4().to_string()).as_str()),
+            // std::fs::write(
+            //     std::path::Path::new(format!("/tmp/cqs/{}.json", uuid::Uuid::new_v4().to_string()).as_str()),
             //     serde_json::to_string_pretty(&trapi_response).unwrap(),
             // )
             // .expect("failed to write output");

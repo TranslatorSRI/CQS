@@ -62,7 +62,7 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
             return Ok(Json(ret));
         }
     }
-    return Err(status::BadRequest(Some("Not a valid query".to_string())));
+    return Err(status::BadRequest("Not a valid query".to_string()));
 }
 
 #[openapi]
@@ -85,7 +85,7 @@ async fn asyncquery_status(job_id: i32) -> Result<Json<AsyncQueryStatusResponse>
             }
         }
     }
-    return Err(status::BadRequest(Some("Not a valid query".to_string())));
+    return Err(status::BadRequest("Not a valid query".to_string()));
 }
 
 #[openapi]
@@ -153,7 +153,7 @@ async fn download(job_id: i32) -> Result<Json<trapi_model_rs::Response>, status:
             }
         }
     }
-    return Err(status::BadRequest(Some("Job not found".to_string())));
+    return Err(status::BadRequest("Job not found".to_string()));
 }
 
 #[rocket::main]
