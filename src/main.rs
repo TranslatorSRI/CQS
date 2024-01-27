@@ -105,11 +105,7 @@ async fn query(data: Json<Query>, reqwest_client: &State<reqwest::Client>) -> Js
         }) {
             if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
                 if let Some(ids) = &node_value.ids {
-                    let curie_token = format!("\"{}\"", ids.clone().into_iter().join("\",\""));
-                    let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES
-                        .iter()
-                        .map(|cqs_query| process(cqs_query, &curie_token, &reqwest_client))
-                        .collect();
+                    let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES.iter().map(|cqs_query| process(cqs_query, &ids, &reqwest_client)).collect();
                     let joined_future_responses = join_all(future_responses).await;
                     joined_future_responses
                         .into_iter()
@@ -214,11 +210,7 @@ async fn process_asyncqueries() {
                         }) {
                             if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
                                 if let Some(ids) = &node_value.ids {
-                                    let curie_token = format!("\"{}\"", ids.clone().into_iter().join("\",\""));
-                                    let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES
-                                        .iter()
-                                        .map(|cqs_query| process(cqs_query, &curie_token, &reqwest_client))
-                                        .collect();
+                                    let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES.iter().map(|cqs_query| process(cqs_query, &ids, &reqwest_client)).collect();
                                     let joined_future_responses = join_all(future_responses).await;
                                     joined_future_responses
                                         .into_iter()
@@ -308,9 +300,9 @@ pub fn create_server() -> Rocket<Build> {
     building_rocket
 }
 
-async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, curie_token: &str, reqwest_client: &reqwest::Client) -> Option<trapi_model_rs::Response> {
+async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, ids: &Vec<trapi_model_rs::CURIE>, reqwest_client: &reqwest::Client) -> Option<trapi_model_rs::Response> {
     info!("PROCESSING CQS QUERY: {}", cqs_query.name());
-    let canned_query: Query = cqs_query.query(curie_token);
+    let canned_query: Query = cqs_query.query(ids);
     let mut canned_query_response = util::post_query_to_workflow_runner(&reqwest_client, &canned_query).await.unwrap();
     util::add_support_graphs(&mut canned_query_response, cqs_query);
     Some(canned_query_response)
