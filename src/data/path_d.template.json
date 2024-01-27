@@ -3,9 +3,7 @@
     "query_graph": {
       "nodes": {
         "n0": {
-          "ids": [
-            CURIE_TOKEN
-          ],
+          "ids": ["{{curies | join: '","'}}"],
           "categories": [
             "biolink:Disease"
           ]
