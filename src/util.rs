@@ -247,12 +247,10 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::
             let mut new_node_bindings: HashMap<String, Vec<NodeBinding>> = HashMap::new();
 
             if let Some((_disease_node_binding_key, disease_node_binding_value)) = result.node_bindings.iter().find(|(k, _v)| **k == cqs_query.template_disease_node_id()) {
-                // println!("disease_node_binding_value: {:?}", disease_node_binding_value);
                 new_node_bindings.insert(cqs_query.inferred_disease_node_id(), disease_node_binding_value.to_vec());
             }
 
             if let Some((_drug_node_binding_key, drug_node_binding_value)) = result.node_bindings.iter().find(|(k, _v)| **k == cqs_query.template_drug_node_id()) {
-                // println!("drug_node_binding_value: {:?}", drug_node_binding_value);
                 new_node_bindings.insert(cqs_query.inferred_drug_node_id(), drug_node_binding_value.to_vec());
             }
 
@@ -273,36 +271,31 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::
                 new_node_bindings.get(&cqs_query.inferred_drug_node_id()),
                 new_node_bindings.get(&cqs_query.inferred_disease_node_id()),
             ) {
-                (Some(drug_node_ids), Some(disease_node_ids)) => {
-                    // println!("drug_node_ids: {:?}", drug_node_ids);
-                    // println!("disease_node_ids: {:?}", disease_node_ids);
-
-                    match (drug_node_ids.first(), disease_node_ids.first()) {
-                        (Some(first_drug_node_id), Some(first_disease_node_id)) => {
-                            let auxiliary_graph_ids: Vec<_> = local_auxiliary_graphs.clone().into_keys().collect();
-                            let mut new_edge = trapi_model_rs::Edge::new(
-                                first_drug_node_id.id.clone(),
-                                BiolinkPredicate::from("biolink:treats"),
-                                first_disease_node_id.id.clone(),
-                                vec![RetrievalSource::new("infores:cqs".to_string(), ResourceRoleEnum::PrimaryKnowledgeSource)],
-                            );
-                            new_edge.attributes = Some(vec![Attribute::new("biolink:support_graphs".to_string(), serde_json::Value::from(auxiliary_graph_ids))]);
-                            println!("new_edge: {:?}", new_edge);
-                            if let Some(kg) = &mut response.message.knowledge_graph {
-                                let new_kg_edge_id = uuid::Uuid::new_v4().to_string();
-                                kg.edges.insert(new_kg_edge_id.clone(), new_edge);
-                                result.analyses.retain(|analysis| analysis.edge_bindings.iter().all(|(_k, v)| !v.is_empty()));
-                                result.analyses.iter_mut().for_each(|analysis| {
-                                    analysis.edge_bindings.clear();
-                                    analysis
-                                        .edge_bindings
-                                        .insert(cqs_query.inferred_predicate_id(), vec![EdgeBinding::new(new_kg_edge_id.clone())]);
-                                });
-                            }
+                (Some(drug_node_ids), Some(disease_node_ids)) => match (drug_node_ids.first(), disease_node_ids.first()) {
+                    (Some(first_drug_node_id), Some(first_disease_node_id)) => {
+                        let auxiliary_graph_ids: Vec<_> = local_auxiliary_graphs.clone().into_keys().collect();
+                        let mut new_edge = trapi_model_rs::Edge::new(
+                            first_drug_node_id.id.clone(),
+                            BiolinkPredicate::from("biolink:treats"),
+                            first_disease_node_id.id.clone(),
+                            vec![RetrievalSource::new("infores:cqs".to_string(), ResourceRoleEnum::PrimaryKnowledgeSource)],
+                        );
+                        new_edge.attributes = Some(vec![Attribute::new("biolink:support_graphs".to_string(), serde_json::Value::from(auxiliary_graph_ids))]);
+                        // println!("new_edge: {:?}", new_edge);
+                        if let Some(kg) = &mut response.message.knowledge_graph {
+                            let new_kg_edge_id = uuid::Uuid::new_v4().to_string();
+                            kg.edges.insert(new_kg_edge_id.clone(), new_edge);
+                            result.analyses.retain(|analysis| analysis.edge_bindings.iter().all(|(_k, v)| !v.is_empty()));
+                            result.analyses.iter_mut().for_each(|analysis| {
+                                analysis.edge_bindings.clear();
+                                analysis
+                                    .edge_bindings
+                                    .insert(cqs_query.inferred_predicate_id(), vec![EdgeBinding::new(new_kg_edge_id.clone())]);
+                            });
                         }
-                        _ => {}
                     }
-                }
+                    _ => {}
+                },
                 _ => {}
             }
             result.node_bindings = new_node_bindings;
@@ -369,7 +362,6 @@ pub fn group_results(message: &mut Message) {
     message.results = Some(new_results);
 }
 
-// analysis.edge_bindings.iter().flat_map(|(k, v)| v.iter().map(|eb| eb.id).collect())
 pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &Query) -> Result<trapi_model_rs::Response, Box<dyn error::Error + Send + Sync>> {
     let workflow_runner_url = format!(
         "{}/query",
@@ -413,15 +405,16 @@ mod test {
     use crate::util::{add_support_graphs, build_node_binding_to_log_odds_data_map};
     use hyper::body::HttpBody;
     use itertools::Itertools;
+    use liquid_core::ValueView;
     use merge_hashmap::Merge;
     use ordered_float::OrderedFloat;
-    use serde_json::Result;
+    use serde_json::{json, Result};
     use std::cmp::Ordering;
     use std::collections::HashMap;
     use std::fs;
     use std::ops::Deref;
     use std::path::Path;
-    use trapi_model_rs::{Analysis, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, NodeBinding, Query, ResourceRoleEnum, Response, RetrievalSource};
+    use trapi_model_rs::{Analysis, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, NodeBinding, Query, ResourceRoleEnum, Response, RetrievalSource, CURIE};
     use uuid::uuid;
 
     #[test]
@@ -471,7 +464,39 @@ mod test {
     }
 
     #[test]
-    fn test_scratch() {
+    fn test_scratch_liquid() {
+        let ids: Vec<String> = vec![
+            "MONDO:0004979".to_string(),
+            "MONDO:0016575".to_string(),
+            "MONDO:0009061".to_string(),
+            "MONDO:0018956".to_string(),
+            "MONDO:0011705".to_string(),
+            "MONDO:0008345".to_string(),
+            "MONDO:0020066".to_string(),
+        ];
+
+        let curie_token = serde_json::to_string(&ids).unwrap();
+        // let curie_token = serde_json::to_value(&ids).unwrap();
+        // let asdf = liquid::model::value!(ids);
+
+        let template = liquid::ParserBuilder::with_stdlib().build().unwrap().parse_file("./src/data/path_a.template.json").unwrap();
+        // let template = liquid::ParserBuilder::with_stdlib().build().unwrap().parse_file("/tmp/path_a.template.json").unwrap();
+
+        let mut globals = liquid::object!({
+            "curies": ids
+        });
+
+        let output = template.render(&globals).unwrap();
+        println!("{}", output);
+
+        let query_ser: trapi_model_rs::Query = serde_json::from_str(&output).expect("Could not cast rendered json");
+        println!("{}", serde_json::to_string_pretty(&query_ser).unwrap());
+
+        // assert_eq!(output, "Liquid! 2".to_string());
+    }
+
+    #[test]
+    fn test_add_aux_graphs() {
         let data = fs::read_to_string(Path::new("/tmp/cqs/a3522bf3-6c73-4ed4-98f4-aada6746ed1d.json")).unwrap();
         // let data = fs::read_to_string(Path::new("/tmp/cqs/fa62acca-ce27-4b7d-8d84-22ab4906bdcc.json")).unwrap();
 
