@@ -1,14 +1,15 @@
 use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
 use crate::scoring;
+use hyper::body::HttpBody;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use reqwest::header;
 use reqwest::redirect::Policy;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 use std::{env, error};
-use trapi_model_rs::{Analysis, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, Message, NodeBinding, Query, ResourceRoleEnum, Response, RetrievalSource};
+use trapi_model_rs::{Analysis, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, Message, NodeBinding, ResourceRoleEnum, Response, RetrievalSource};
 
 #[allow(dead_code)]
 pub fn build_node_binding_to_log_odds_data_map(message: Message) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
@@ -150,7 +151,7 @@ pub fn add_composite_score_attributes(
                                 match entry {
                                     Some((_entry_key, entry_values)) => {
                                         let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
-                                        let mut edge_binding_map = HashMap::new();
+                                        let mut edge_binding_map = BTreeMap::new();
                                         edge_binding_map.insert(qg_key.clone(), kg_edge_keys);
                                         let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
                                         analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
@@ -164,7 +165,7 @@ pub fn add_composite_score_attributes(
 
                                         if let Some((_entry_key, entry_values)) = entry {
                                             let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
-                                            let mut analysis = Analysis::new("infores:cqs".into(), HashMap::from([(qg_key.clone(), kg_edge_keys)]));
+                                            let mut analysis = Analysis::new("infores:cqs".into(), BTreeMap::from([(qg_key.clone(), kg_edge_keys)]));
                                             analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
                                             analysis.score = Some(cqs_query.compute_score(entry_values));
                                             debug!("analysis: {:?}", analysis);
@@ -240,11 +241,11 @@ pub fn sort_results_by_analysis_score(message: &mut Message) {
 }
 
 pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::CQSQuery>) {
-    let mut auxiliary_graphs: HashMap<String, AuxiliaryGraph> = HashMap::new();
+    let mut auxiliary_graphs: BTreeMap<String, AuxiliaryGraph> = BTreeMap::new();
 
     if let Some(results) = &mut response.message.results {
         for result in results {
-            let mut new_node_bindings: HashMap<String, Vec<NodeBinding>> = HashMap::new();
+            let mut new_node_bindings: BTreeMap<String, Vec<NodeBinding>> = BTreeMap::new();
 
             if let Some((_disease_node_binding_key, disease_node_binding_value)) = result.node_bindings.iter().find(|(k, _v)| **k == cqs_query.template_disease_node_id()) {
                 new_node_bindings.insert(cqs_query.inferred_disease_node_id(), disease_node_binding_value.to_vec());
@@ -254,7 +255,7 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::
                 new_node_bindings.insert(cqs_query.inferred_drug_node_id(), drug_node_binding_value.to_vec());
             }
 
-            let mut local_auxiliary_graphs: HashMap<String, AuxiliaryGraph> = HashMap::new();
+            let mut local_auxiliary_graphs: BTreeMap<String, AuxiliaryGraph> = BTreeMap::new();
             result.analyses.iter().for_each(|analysis| {
                 let eb_ids: Vec<String> = analysis
                     .edge_bindings
@@ -351,7 +352,7 @@ pub fn group_results(message: &mut Message) {
 
                         if let Some(analysis) = v.iter().next() {
                             let mut a = analysis.clone();
-                            a.edge_bindings = edge_binding_map;
+                            a.edge_bindings = edge_binding_map.into_iter().collect();
                             result.analyses.push(a);
                         }
                     }
@@ -362,7 +363,7 @@ pub fn group_results(message: &mut Message) {
     message.results = Some(new_results);
 }
 
-pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &Query) -> Result<trapi_model_rs::Response, Box<dyn error::Error + Send + Sync>> {
+pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &crate::Query) -> Result<trapi_model_rs::Response, Box<dyn error::Error + Send + Sync>> {
     let workflow_runner_url = format!(
         "{}/query",
         env::var("WORKFLOW_RUNNER_URL").unwrap_or("https://translator-workflow-runner.renci.org".to_string())
@@ -374,11 +375,6 @@ pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &Que
             debug!("response.status(): {}", response.status());
             let data = response.text().await?;
             let trapi_response: trapi_model_rs::Response = serde_json::from_str(data.as_str()).expect("could not parse Query");
-            // std::fs::write(
-            //     std::path::Path::new(format!("/tmp/cqs/{}.json", uuid::Uuid::new_v4().to_string()).as_str()),
-            //     serde_json::to_string_pretty(&trapi_response).unwrap(),
-            // )
-            // .expect("failed to write output");
             Ok(trapi_response)
         }
         Err(e) => Err(Box::new(e)),
@@ -405,10 +401,9 @@ mod test {
     use crate::util::{add_support_graphs, build_node_binding_to_log_odds_data_map};
     use hyper::body::HttpBody;
     use itertools::Itertools;
-    use liquid_core::ValueView;
     use merge_hashmap::Merge;
     use ordered_float::OrderedFloat;
-    use serde_json::{json, Result};
+    use serde_json::{json, Result, Value};
     use std::cmp::Ordering;
     use std::collections::HashMap;
     use std::fs;
@@ -489,8 +484,11 @@ mod test {
         let output = template.render(&globals).unwrap();
         println!("{}", output);
 
-        let query_ser: trapi_model_rs::Query = serde_json::from_str(&output).expect("Could not cast rendered json");
-        println!("{}", serde_json::to_string_pretty(&query_ser).unwrap());
+        let query_json_value: serde_json::Value = serde_json::from_str(&output).expect("Could not cast rendered json");
+        println!("{}", serde_json::to_string_pretty(&query_json_value).unwrap());
+
+        let query_model: trapi_model_rs::Query = serde_json::from_str(&output).expect("Could not cast rendered json");
+        println!("{}", serde_json::to_string_pretty(&query_model).unwrap());
 
         // assert_eq!(output, "Liquid! 2".to_string());
     }
@@ -607,27 +605,6 @@ mod test {
                         }
                         Some(found_result) => {}
                     });
-                // [
-                // [Analysis { resource_id: "infores:aragorn", score: Some(0.6528858213265621), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "27c3fad9-8381-420b-995f-1b6eeff6ba96", attributes: None }]}, attributes: None }],
-                // [Analysis { resource_id: "infores:aragorn", score: Some(0.7305575193846134), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "3d35e46a-caee-41d6-99f6-6d27230df3ba", attributes: None }]}, attributes: None }],
-                // [Analysis { resource_id: "infores:aragorn", score: Some(0.7305575193846134), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "6baae381-a426-49c7-beb4-9deaa107ef25", attributes: None }]}, attributes: None }],
-                // [Analysis { resource_id: "infores:aragorn", score: Some(0.781241807653375), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "5e3ea8bc-6071-4754-be2a-005b5107e059", attributes: None }]}, attributes: None }],
-                // [Analysis { resource_id: "infores:aragorn", score: Some(0.801544486430907), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "f7251cbc-2729-4a7b-8b9c-82afe84432f0", attributes: None }]}, attributes: None }],
-                // [Analysis { resource_id: "infores:aragorn", score: Some(0.8173595282117875), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "6637babd-1cac-41e8-a2ca-198869a9aafb", attributes: None }]}, attributes: None }],
-                // [Analysis { resource_id: "infores:aragorn", score: Some(0.8178765918805924), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "3edb20e5-3a82-4f71-a655-39e58636ffd9", attributes: None }]}, attributes: None }]
-                // ]
-
-                // {
-                //     ("infores:aragorn", OrderedFloat(0.801544486430907)): [Analysis { resource_id: "infores:aragorn", score: Some(0.801544486430907), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "cdf1c0d1-992d-4300-b7f3-3bd5a0b283ae", attributes: None }]}, attributes: None }],
-                //     ("infores:aragorn", OrderedFloat(0.8173595282117875)): [Analysis { resource_id: "infores:aragorn", score: Some(0.8173595282117875), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "7f43acbc-2dbf-43a1-b278-4d38aff0dbba", attributes: None }]}, attributes: None }],
-                //     ("infores:aragorn", OrderedFloat(0.6528858213265621)): [Analysis { resource_id: "infores:aragorn", score: Some(0.6528858213265621), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "3fdc1246-6103-457b-bf34-01fa0997ecbf", attributes: None }]}, attributes: None }],
-                //     ("infores:aragorn", OrderedFloat(0.781241807653375)): [Analysis { resource_id: "infores:aragorn", score: Some(0.781241807653375), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "298feefe-d958-47da-a16e-1448f801c141", attributes: None }]}, attributes: None }],
-                //     ("infores:aragorn", OrderedFloat(0.8178765918805924)): [Analysis { resource_id: "infores:aragorn", score: Some(0.8178765918805924), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "011f521e-e670-4067-b6b5-6b2954256b3b", attributes: None }]}, attributes: None }],
-                //     ("infores:aragorn", OrderedFloat(0.7305575193846134)): [
-                //         Analysis { resource_id: "infores:aragorn", score: Some(0.7305575193846134), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "71b47f68-c204-428f-98c1-4f0a4cd6d8ce", attributes: None }]}, attributes: None },
-                //         Analysis { resource_id: "infores:aragorn", score: Some(0.7305575193846134), scoring_method: None, support_graphs: None, edge_bindings: {"e0": [EdgeBinding { id: "df7dc838-4684-42b4-9521-4710328d005e", attributes: None }]}, attributes: None }
-                //     ]
-                // }
 
                 // 2nd pass is to add analyses
                 for result in new_results.iter_mut() {
@@ -665,22 +642,6 @@ mod test {
                     }
 
                     // println!("{:?}", asdf);
-
-                    //     for found_analysis in found_result.analyses.iter_mut() {
-                    //         let eb_ids: Vec<String> = found_analysis
-                    //             .edge_bindings
-                    //             .iter()
-                    //             .map(|(k, v)| v.iter().map(|eb| eb.id.clone()).collect::<Vec<String>>())
-                    //             .flatten()
-                    //             .collect();
-                    //         if original_analysis.resource_id == found_analysis.resource_id && .all(|v| v.contains()){
-                    //
-                    //         }
-                    //     }
-                    // }
-                    //
-                    // found_result.analyses.
-                    // }
                 }
             }
             response.message.results = Some(new_results);
