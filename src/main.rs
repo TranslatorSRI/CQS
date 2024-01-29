@@ -304,11 +304,11 @@ async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, ids: &Vec<trapi_model_r
     info!("rendered query template {}: {}", cqs_query.name(), serde_json::to_string_pretty(&canned_query).unwrap());
     let mut canned_query_response = util::post_query_to_workflow_runner(&reqwest_client, &canned_query).await.unwrap();
 
-    std::fs::write(
-        std::path::Path::new(format!("/tmp/cqs/path_{}-{}.json", cqs_query.name(), uuid::Uuid::new_v4().to_string()).as_str()),
-        serde_json::to_string_pretty(&canned_query_response).unwrap(),
-    )
-    .expect("failed to write output");
+    // std::fs::write(
+    //     std::path::Path::new(format!("/tmp/cqs/path_{}-{}.json", cqs_query.name(), uuid::Uuid::new_v4().to_string()).as_str()),
+    //     serde_json::to_string_pretty(&canned_query_response).unwrap(),
+    // )
+    // .expect("failed to write output");
 
     util::add_support_graphs(&mut canned_query_response, cqs_query);
     Some(canned_query_response)
