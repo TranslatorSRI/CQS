@@ -16,6 +16,14 @@ services:
     ports:
       - "5432:5432"
 
+  callback-app:
+    container_name: callback-app
+    image: ghcr.io/translatorsri/callback-test-app:0.1.0
+    expose:
+      - 8008
+    ports:
+      - "8008:8008"
+
   cqs-app:
     container_name: cqs-app
     build: .
@@ -29,3 +37,5 @@ services:
       - /tmp/cqs:/tmp/cqs
     depends_on:
       - cqs-pg-db
+      - callback-app
+
