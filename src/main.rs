@@ -62,7 +62,7 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
             return Ok(Json(ret));
         }
     }
-    return Err(status::BadRequest("Not a valid query".to_string()));
+    return Err(status::BadRequest("Invalid Query".to_string()));
 }
 
 #[openapi]
