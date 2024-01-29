@@ -57,7 +57,8 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
         }) {
             let job = NewJob::new(JobStatus::Queued, serde_json::to_string(&query).unwrap().into_bytes());
             let job_id = job_actions::insert(&job).expect("did not insert");
-            let ret = AsyncQueryResponse::new(job_id.to_string());
+            let mut ret = AsyncQueryResponse::new(job_id.to_string());
+            ret.status = Some(JobStatus::Queued.to_string());
             return Ok(Json(ret));
         }
     }
@@ -67,24 +68,24 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
 #[openapi]
 #[get("/asyncquery_status/<job_id>")]
 async fn asyncquery_status(job_id: i32) -> Result<Json<AsyncQueryStatusResponse>, status::BadRequest<String>> {
-    if let Ok(job_result) = job_actions::find_by_id(job_id) {
-        if let Some(job) = job_result {
-            if let Some(job_response) = job.response {
-                let response: trapi_model_rs::Response = serde_json::from_str(&*String::from_utf8_lossy(job_response.as_slice())).unwrap();
-                if let Some(logs) = response.logs {
-                    let response_url = format!("{}/download/{}", env::var("RESPONSE_URL").unwrap_or("http://localhost:8000".to_string()), job.id);
-                    let status_response = AsyncQueryStatusResponse {
-                        status: job.status.to_string(),
-                        description: job.status.to_string(),
-                        logs,
-                        response_url: Some(response_url),
-                    };
-                    return Ok(Json(status_response));
-                }
+    debug!("job id: {}", job_id);
+    if let Some(job) = job_actions::find_by_id(job_id).expect("Could not find Job") {
+        let mut status_response = AsyncQueryStatusResponse {
+            status: job.status.to_string(),
+            description: job.status.to_string(),
+            logs: vec![],
+            response_url: Some(format!("{}/download/{}", env::var("RESPONSE_URL").unwrap_or("http://localhost:8000".to_string()), job.id)),
+        };
+
+        if let Some(job_response) = job.response {
+            let response: trapi_model_rs::Response = serde_json::from_str(&*String::from_utf8_lossy(job_response.as_slice())).unwrap();
+            if let Some(logs) = response.logs {
+                status_response.logs = logs.clone();
             }
         }
+        return Ok(Json(status_response));
     }
-    return Err(status::BadRequest("Not a valid query".to_string()));
+    return Err(status::BadRequest("Job not found".to_string()));
 }
 
 #[openapi]
@@ -230,6 +231,10 @@ async fn process_asyncqueries() {
                         responses.into_iter().for_each(|r| {
                             message.merge(r.message);
                         });
+
+                        util::group_results(&mut message);
+                        util::sort_analysis_by_score(&mut message);
+                        util::sort_results_by_analysis_score(&mut message);
 
                         // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
                         //
