@@ -27,7 +27,7 @@ pub fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f6
 
 pub trait CQSQuery: Send + Sync {
     fn name(&self) -> String;
-    fn query(&self, ids: &Vec<trapi_model_rs::CURIE>) -> Query;
+    fn render_query_template(&self, ids: &Vec<trapi_model_rs::CURIE>) -> Query;
     fn inferred_drug_node_id(&self) -> String;
     fn inferred_predicate_id(&self) -> String;
     fn inferred_disease_node_id(&self) -> String;
@@ -71,7 +71,7 @@ macro_rules! impl_wrapper {
                 $template_disease_node_id.to_string()
             }
 
-            fn query(&self, ids: &Vec<trapi_model_rs::CURIE>) -> Query {
+            fn render_query_template(&self, ids: &Vec<trapi_model_rs::CURIE>) -> Query {
                 let file = format!("./src/data/path_{}.template.json", $bar.to_string());
                 let parser = liquid::ParserBuilder::with_stdlib().build().unwrap().parse_file(file).unwrap();
 
@@ -80,10 +80,6 @@ macro_rules! impl_wrapper {
                 });
 
                 let template = parser.render(&globals).unwrap();
-                // let file = format!("./src/data/path_{}.template.json", $bar.to_string());
-                // let mut template = fs::read_to_string(&file).expect(format!("Could not find file: {}", &file).as_str());
-                // let template = template.replace("CURIE_TOKEN", curie_token);
-                debug!("template: {}", template);
                 let query: Query = serde_json::from_str(template.as_str()).unwrap();
                 query
             }
