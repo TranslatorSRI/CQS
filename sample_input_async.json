@@ -1,0 +1,14 @@
+{
+  "message": {
+    "query_graph": {
+      "nodes": {
+        "n0": {"categories": ["biolink:ChemicalEntity"]},
+        "n1": {"ids": ["MONDO:0004979"]}
+      },
+      "edges": {
+        "e0": {"subject": "n0", "object": "n1", "predicates": ["biolink:treats"], "knowledge_type": "inferred"}
+      }
+    }
+  },
+  "callback": "http://callback-test-app:8008/receive_callback_query"
+}
