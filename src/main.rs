@@ -13,7 +13,6 @@ use crate::model::{JobStatus, NewJob};
 use chrono::Utc;
 use dotenvy::dotenv;
 use futures::future::join_all;
-use itertools::Itertools;
 use merge_hashmap::Merge;
 use rocket::response::status;
 use rocket::serde::json::Json;
