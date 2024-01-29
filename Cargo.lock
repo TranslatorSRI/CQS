@@ -348,7 +348,6 @@ dependencies = [
  "itertools 0.12.0",
  "lazy_static",
  "liquid",
- "liquid-core",
  "log",
  "merge-hashmap",
  "ordered-float",
