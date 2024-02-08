@@ -9,8 +9,10 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
+use crate::job_actions::update;
 use crate::model::{JobStatus, NewJob};
 use chrono::Utc;
+use diesel::PgArrayExpressionMethods;
 use dotenvy::dotenv;
 use futures::future::join_all;
 use merge_hashmap::Merge;
@@ -20,6 +22,7 @@ use rocket::{tokio, Build, Rocket, State};
 use rocket_okapi::okapi::openapi3::*;
 use rocket_okapi::{mount_endpoints_and_merged_docs, openapi, openapi_get_routes_spec, swagger_ui::*};
 use std::env;
+use std::error::Error;
 use std::time::Duration;
 use trapi_model_rs::{AsyncQuery, AsyncQueryResponse, AsyncQueryStatusResponse, KnowledgeType, Query};
 
@@ -64,6 +67,14 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
     }
     return Err(status::BadRequest("Invalid Query".to_string()));
 }
+
+// #[openapi]
+// #[get("/view_asyncquery/<job_id>")]
+// async fn view_asyncquery(job_id: i32) -> Result<Json<AsyncQuery>, status::BadRequest<String>> {
+//     let job = job_actions::find_by_id(job_id).expect("Could not find Job").unwrap();
+//     let ret: AsyncQuery = serde_json::from_str(&String::from_utf8_lossy(&job.query.as_slice())).unwrap();
+//     return Ok(Json(ret));
+// }
 
 #[openapi]
 #[get("/asyncquery_status/<job_id>")]
@@ -182,6 +193,12 @@ async fn process_asyncqueries() {
     let reqwest_client = util::build_http_client();
 
     if let Ok(mut undone_jobs) = job_actions::find_undone() {
+        let update_job = |job: &mut model::Job, job_status: JobStatus| {
+            job.date_finished = Some(Utc::now().naive_utc());
+            job.status = job_status;
+            job_actions::update(job).expect(format!("Could not update Job: {}", job.id).as_str());
+        };
+
         let a_job_is_running = undone_jobs.iter().any(|a| a.status == JobStatus::Running);
         match a_job_is_running {
             true => {
@@ -195,7 +212,7 @@ async fn process_asyncqueries() {
                     job.status = JobStatus::Running;
                     job_actions::update(job).expect(format!("Could not update Job: {}", job.id).as_str());
 
-                    let query: AsyncQuery = serde_json::from_str(&*String::from_utf8_lossy(job.query.as_slice())).unwrap();
+                    let query: AsyncQuery = serde_json::from_str(&*String::from_utf8_lossy(job.query.as_slice())).expect("Could not deserialize AsyncQuery");
 
                     let mut responses: Vec<trapi_model_rs::Response> = vec![];
 
@@ -222,9 +239,7 @@ async fn process_asyncqueries() {
                     }
 
                     if responses.is_empty() {
-                        job.date_finished = Some(Utc::now().naive_utc());
-                        job.status = JobStatus::Failed;
-                        job_actions::update(job).expect(format!("Could not update Job: {}", job.id).as_str());
+                        update_job(job, JobStatus::Failed);
                     } else {
                         let mut message = query.message.clone();
 
@@ -237,9 +252,7 @@ async fn process_asyncqueries() {
                         util::sort_results_by_analysis_score(&mut message);
 
                         // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
-                        //
                         // let message_with_score_attributes = util::add_composite_score_attributes(message, node_binding_to_log_odds_map);
-                        //
                         // let mut ret = trapi_model_rs::Response::new(message_with_score_attributes);
                         let mut ret = trapi_model_rs::Response::new(message);
                         ret.status = Some("Success".to_string());
@@ -250,27 +263,38 @@ async fn process_asyncqueries() {
                         // fs::write(Path::new("/tmp/zxcv.json"), &serde_json::to_string_pretty(&ret).unwrap()).unwrap();
 
                         job.response = Some(serde_json::to_string(&ret).unwrap().into_bytes());
-                        job.date_finished = Some(Utc::now().naive_utc());
-                        job.status = JobStatus::Completed;
-                        job_actions::update(job).expect(format!("Could not update Job: {}", job.id).as_str());
+                        update_job(job, JobStatus::Completed);
 
                         // 1st attempt
-                        let callback_response_result = reqwest_client.post(&query.callback).json(&ret).send().await;
-                        match callback_response_result {
-                            Ok(callback_response) => {
-                                if !callback_response.status().is_success() {
-                                    tokio::time::sleep(Duration::from_secs(5)).await;
+                        info!("1st attempt at sending response to: {}", &query.callback);
+                        match reqwest_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
+                            Ok(first_attempt_callback_response) => {
+                                let first_attempt_status_code = first_attempt_callback_response.status();
+                                debug!("first_attempt_status_code: {}", first_attempt_status_code);
+                                if !first_attempt_status_code.is_success() {
+                                    // update_job(job, JobStatus::Failed);
+                                    warn!("failed to make 1st callback post");
+                                    tokio::time::sleep(Duration::from_secs(10)).await;
                                     // 2st attempt
-                                    let callback_response = reqwest_client.post(&query.callback).json(&ret).send().await.unwrap();
-                                    if !callback_response.status().is_success() {
-                                        job.date_finished = Some(Utc::now().naive_utc());
-                                        job.status = JobStatus::Failed;
-                                        job_actions::update(job).expect(format!("Could not update Job: {}", job.id).as_str());
+                                    info!("2nd attempt at sending response to: {}", &query.callback);
+                                    match reqwest_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
+                                        Ok(second_attempt_callback_response) => {
+                                            let second_attempt_status_code = second_attempt_callback_response.status();
+                                            debug!("second_attempt_status_code: {}", second_attempt_status_code);
+                                            if second_attempt_status_code.is_success() {
+                                                // update_job(job, JobStatus::Completed);
+                                            } else {
+                                                warn!("failed to make 2nd callback post");
+                                            }
+                                        }
+                                        Err(e) => {
+                                            warn!("2nd attempt at callback error: {}", e);
+                                        }
                                     }
                                 }
                             }
                             Err(e) => {
-                                warn!("{}", e);
+                                warn!("1st attempt at callback error: {}", e);
                             }
                         }
                     }
@@ -323,5 +347,5 @@ async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, ids: &Vec<trapi_model_r
 }
 
 pub fn get_routes_and_docs(settings: &rocket_okapi::settings::OpenApiSettings) -> (Vec<rocket::Route>, OpenApi) {
-    openapi_get_routes_spec![settings: query, asyncquery, asyncquery_status, download]
+    openapi_get_routes_spec![settings: query, asyncquery, asyncquery_status, download/*, view_asyncquery*/]
 }
