@@ -9,10 +9,8 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-use crate::job_actions::update;
 use crate::model::{JobStatus, NewJob};
 use chrono::Utc;
-use diesel::PgArrayExpressionMethods;
 use dotenvy::dotenv;
 use futures::future::join_all;
 use merge_hashmap::Merge;
@@ -22,7 +20,6 @@ use rocket::{tokio, Build, Rocket, State};
 use rocket_okapi::okapi::openapi3::*;
 use rocket_okapi::{mount_endpoints_and_merged_docs, openapi, openapi_get_routes_spec, swagger_ui::*};
 use std::env;
-use std::error::Error;
 use std::time::Duration;
 use trapi_model_rs::{AsyncQuery, AsyncQueryResponse, AsyncQueryStatusResponse, KnowledgeType, Query};
 
