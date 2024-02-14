@@ -1,6 +1,5 @@
 use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
 use crate::scoring;
-use hyper::body::HttpBody;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use reqwest::header;
