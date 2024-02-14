@@ -93,6 +93,6 @@ macro_rules! impl_wrapper {
 
 impl_wrapper!(CQSQueryA, "a", "n0", "e0", "n1", "n3", "n0", compute_composite_score);
 impl_wrapper!(CQSQueryB, "b", "n0", "e0", "n1", "n3", "n0", compute_composite_score);
-impl_wrapper!(CQSQueryC, "c", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
-impl_wrapper!(CQSQueryD, "d", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
+// impl_wrapper!(CQSQueryC, "c", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
+// impl_wrapper!(CQSQueryD, "d", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
 impl_wrapper!(CQSQueryE, "e", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
