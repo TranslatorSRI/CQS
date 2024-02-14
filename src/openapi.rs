@@ -52,7 +52,7 @@ pub fn custom_openapi_spec() -> OpenApi {
         },
         servers: vec![Server {
             url: response_url_root,
-            description: Some("development".to_owned()),
+            description: Some(maturity.clone()),
             extensions: {
                 let raw_extensions = json!({
                     "x-maturity": maturity,
