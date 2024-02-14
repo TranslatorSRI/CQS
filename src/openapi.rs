@@ -5,6 +5,7 @@ use std::env;
 pub fn custom_openapi_spec() -> OpenApi {
     let response_url_root = env::var("RESPONSE_URL").unwrap_or("http://localhost:8000".to_string());
     let maturity = env::var("MATURITY").unwrap_or("development".to_string());
+    let location = env::var("LOCATION").unwrap_or("RENCI".to_string());
     let trapi_version = env::var("SCHEMA_VERSION").unwrap_or("1.4.0".to_string());
     OpenApi {
         openapi: OpenApi::default_version(),
@@ -55,7 +56,7 @@ pub fn custom_openapi_spec() -> OpenApi {
             extensions: {
                 let raw_extensions = json!({
                     "x-maturity": maturity,
-                    "x-location": "RENCI",
+                    "x-location": location,
                     "x-trapi": trapi_version
                 });
                 Object::from_iter(raw_extensions.as_object().unwrap().clone())
