@@ -16,7 +16,7 @@ echo "MAJOR_MINOR_VERSION: $MAJOR_MINOR_VERSION"
 sed -i -e "s|version = \"$VERSION\"|version = \"$RELEASE_VERSION\"|g" Cargo.toml
 yq -i ".version = \"$RELEASE_VERSION\"" helm/Chart.yaml
 yq -i ".image.tag = \"$RELEASE_VERSION\"" helm/values.yaml
-yq -i ".ingress.major_minor_version = \"$MAJOR_MINOR_VERSION\"" helm/values.yaml
+#yq -i ".ingress.major_minor_version = \"$MAJOR_MINOR_VERSION\"" helm/values.yaml
 
 docker build -t $DOCKER_REPO/cqs:$RELEASE_VERSION .
 docker push $DOCKER_REPO/cqs:$RELEASE_VERSION
