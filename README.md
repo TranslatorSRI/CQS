@@ -18,7 +18,7 @@ The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in F
 
 3. Scoring of individual workflow paths can be customized
 
-- e.g., ARAGORN’s scoring/ranking algorithm, OpenPredict’s prediction score
+- e.g., ARAGORN’s scoring/ranking algorithm, OpenPredict’s prediction score 
 
 - Scoring within a result is in descending order, based on the analysis score. Scoring across results is currently based on the max analysis score, in descending order
 
@@ -43,8 +43,9 @@ A detailed implementation plan was developed by Jason F., Arbrar M., Chris B., C
   - The MVP1 workflow Paths A, B, and E will be configured as valid TRAPI queries, with allowlist parameters to target Aragorn and select KPs, depending on the path.
 - At runtime, when the registered template query-graph (without a workflow but with a URL for return response) comes in from the ARS, the CQS will submit the associated TRAPI queries with workflows but without score operations to the Workflow Runner (WFR) and get back the results
 - After all results are returned, the CQS will use FastAPI Reasoner Pydantic to merge the N sets of results by the result node
-- The CQS will then score results using Aragorn's scoring/ranking operation (Paths A and B) or OpenPredict's scoring metric (Path E).
-- After scoring results, the CQS will return the results to the ARS
+- The CQS will then score results using [Aragorn's scoring/ranking operation](https://github.com/ranking-agent/aragorn-ranker) (Paths A and B) or OpenPredict's scoring metric (Path E)
+- If a result is supported by more than one path, then the CQS includes the max analysis score in the full result; other options for future consideration include a self-weighted mean: (score = sum(score_i^2) / sum(score_i) [heavier weight on higher scores]
+- After scoring results, the CQS will return the results to the ARS in the form of inferred treats edges with supporting aux graphs, i.e, Paths A, B, E 
 
 Please refer to the [wiki](https://github.com/TranslatorSRI/CQS/wiki) for more detailed technical documentation.
 
