@@ -34,7 +34,7 @@ mod util;
 lazy_static! {
     pub static ref WHITELISTED_CANNED_QUERIES: Vec<Box<dyn scoring::CQSQuery>> = vec![
         Box::new(scoring::CQSQueryA::new()),
-        Box::new(scoring::CQSQueryB::new()),
+        // Box::new(scoring::CQSQueryB::new()),
         // Box::new(scoring::CQSQueryC::new()),
         // Box::new(scoring::CQSQueryD::new()),
         Box::new(scoring::CQSQueryE::new())
@@ -330,11 +330,16 @@ async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, ids: &Vec<trapi_model_r
     info!("rendered query template {}: {}", cqs_query.name(), serde_json::to_string_pretty(&canned_query).unwrap());
     let mut canned_query_response = util::post_query_to_workflow_runner(&reqwest_client, &canned_query).await.unwrap();
 
-    // std::fs::write(
-    //     std::path::Path::new(format!("/tmp/cqs/path_{}-{}.json", cqs_query.name(), uuid::Uuid::new_v4().to_string()).as_str()),
-    //     serde_json::to_string_pretty(&canned_query_response).unwrap(),
-    // )
-    // .expect("failed to write output");
+    match env::var("WRITE_WFR_OUTPUT").unwrap_or("false".to_string()).as_str() {
+        "true" => {
+            std::fs::write(
+                std::path::Path::new(format!("/tmp/cqs/path_{}-{}.json", cqs_query.name(), uuid::Uuid::new_v4().to_string()).as_str()),
+                serde_json::to_string_pretty(&canned_query_response).unwrap(),
+            )
+            .expect("failed to write output");
+        }
+        _ => {}
+    };
 
     util::add_support_graphs(&mut canned_query_response, cqs_query);
     Some(canned_query_response)
