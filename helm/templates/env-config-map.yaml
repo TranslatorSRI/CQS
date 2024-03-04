@@ -13,3 +13,4 @@ data:
   POSTGRES_USER: "{{ .Values.postgres.user }}"
   POSTGRES_PASSWORD: "{{ .Values.postgres.password }}"
   POSTGRES_SERVER: "{{ .Values.postgres.server }}"
+  WRITE_WFR_OUTPUT: "{{ .Values.app.write_wfr_output }}"

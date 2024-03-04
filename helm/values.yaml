@@ -45,6 +45,7 @@ app:
   log_level: "info,rocket=debug,launch=debug"
   workflow_runner_url: "https://translator-workflow-runner.renci.org"
   response_url: "http://localhost:8000"
+  write_wfr_output: "false"
 postgres:
   image:
     repository: "postgres"
