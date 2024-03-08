@@ -33,6 +33,9 @@ The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in F
    
 4. Facilitates consistent specification and implementation of inference rules, by providing a centralized and transparent place to define, align, and collaborate on inference rules
 
+## Architectural Overview
+
+![302356961-f06ec0ef-d2bc-45ec-bdc8-d0feae58933c](https://github.com/TranslatorSRI/CQS/assets/26254388/a6fa3bfa-7aa4-43ed-8411-5cbb292a8bdc)
 
 ## CQS Implementation Plan
 
