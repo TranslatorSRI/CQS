@@ -1,6 +1,6 @@
 ## Path B
 
-This path of the CDC get_creative() workflow is intended to run from a biolink:Disease input CURIE related to a rare pulmonary disease through biolink:Tissue and biolink:Gene enriched in those tissue, using CHP's gene-tissue enricher functionality, to biolink:Drug, SmallMolecule and then to biolink:DiseaseOrPhenotypicFeature by way of biolink:has_real_world_evidence_of_association_with.
+Path B is intended to run from a biolink:Disease input CURIE related to a rare pulmonary disease (or any disease) through biolink:Tissue and biolink:Gene enriched in those tissues, targeting and leveraging CHP's gene-tissue enricher functionality, to biolink:Drug, SmallMolecule and then to biolink:DiseaseOrPhenotypicFeature by way of clinical KPs, using predicates biolink:correlated_with and biolink:associated_with_increased(decreased)_likelihood_of plus _allowlist_ parameters.
 
 ## Queries
 
