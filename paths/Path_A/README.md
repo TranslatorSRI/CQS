@@ -1,6 +1,6 @@
-### Path A (clinical KPs)
+## Path A (clinical KPs)
 
-## Rare Pulmonary Disease Use Case
+### Rare Pulmonary Disease Use Case
 
 Path A was developed by the TCDC in support of MVP1 (_what drugs may treat disease X_) and leveraging clinical KP "knowledge". Development and testing focused on a select set of CURIEs for rare pulmonary diseases plus a common pulmonary disease (asthma) and a non-pulmonary disease (EDS) for comparison. 
 
@@ -19,7 +19,7 @@ Path A was developed by the TCDC in support of MVP1 (_what drugs may treat disea
 - Dr. Michael Knowles, UNC Chapel Hill
 - Dr. Margaret Leigh, UNC Chapel Hill
 
-## Overall Structure
+### Overall Structure
 
 Path A serves as a CQS template and is structured as a valid TRAPI query, with workflow parameters and an _allowlist_ parameter. 
 
