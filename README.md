@@ -2,7 +2,7 @@
 
 ## CQS Overview
 
-The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in Fall 2022. The goal is to create a skeletal ARA that initially will support the [TCDC's MVP1 workflow on rare pulmonary disease](https://github.com/TranslatorSRI/CQS/tree/main/paths) (MVP1 Template 1 (clinical-kps)), but the goal is for the CQS to provide a general model and approach for other teams, committees, working groups, and external users who wish to contribute to the Translator ecosystem. The development and implementation work is being supported by the Translator Standards and Reference Implementation (SRI) core, with Jason Reilly serving as lead developer. Plans for long-term maintenance are TBD.
+The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in Fall 2022. The goal is to create a skeletal ARA that initially will support the [TCDC's MVP1 workflow on rare pulmonary disease](https://github.com/TranslatorSRI/CQS/tree/main/paths), e.g., MVP1 Template 1 (clinical-kps), but the goal is for the CQS to provide a general model and approach for other teams, committees, working groups, and external users who wish to contribute to the Translator ecosystem. The development and implementation work is being supported by the Translator Standards and Reference Implementation (SRI) core, with Jason Reilly serving as lead developer. Plans for long-term maintenance are TBD.
 
 **What It Does**
 
@@ -35,7 +35,7 @@ The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in F
 
 ## Architectural Overview
 
-![302356961-f06ec0ef-d2bc-45ec-bdc8-d0feae58933c](https://github.com/TranslatorSRI/CQS/assets/26254388/a6fa3bfa-7aa4-43ed-8411-5cbb292a8bdc)
+![image](https://github.com/TranslatorSRI/CQS/assets/26254388/c8989e81-a3b3-48e6-b2a0-f43e0352412e)
 
 ## CQS Implementation Plan
 
