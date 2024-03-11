@@ -16,8 +16,10 @@ The process to contribute a new QQS template is as follows:
 
 The nomenclature for CQS templates is as follows:
 
-MVP# Template # (infores)
+Human-readable format: MVP# Template # (infores)
 Example: MVP1 Template 3 (openpredict)
+
+GitHub format: mvp#-template#-infores
 
 Example JSON query
 
