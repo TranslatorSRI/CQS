@@ -43,7 +43,7 @@ A detailed implementation plan was developed by Jason F., Arbrar M., Chris B., C
 
 - Jason will register within CQS mappings between an MVP template query-graph and one or more TRAPI queries with workflows but without score operations (i.e., a valid TRAPI message with a query_graph and a workflow element)  
   - For the ‘treats’ MVP1 question, there will be [three templates, MVP1 Template 1 (clinical-kps), MVP1 Template 2 (connections-hypothesis), and MVP1 Template 3 (openpredict)](https://github.com/TranslatorSRI/CQS/tree/main/paths), for initial deployment and testing, with additional workflow templates implemented after validation of the service
-  - The MVP1 Templates 1, 2, and 3 will be configured as valid TRAPI queries, with allowlist parameters to target Aragorn and select KPs, depending on the template.
+  - The MVP1 Templates 1, 2, and 3 will be configured as valid TRAPI queries, with allowlist parameters to target Aragorn and select KPs, depending on the template
 - At runtime, when the registered template query-graph (without a workflow but with a URL for return response) comes in from the ARS, the CQS will submit the associated TRAPI queries with workflows but without score operations to the Workflow Runner (WFR) and get back the results
 - After all results are returned, the CQS will use FastAPI Reasoner Pydantic to merge the N sets of results by the result node
 - The CQS will then score results using [Aragorn's scoring/ranking operation](https://github.com/ranking-agent/aragorn-ranker) (Templates 1 and 2) or OpenPredict's scoring metric (Template 3)
