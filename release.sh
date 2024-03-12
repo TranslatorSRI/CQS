@@ -24,3 +24,6 @@ docker push $DOCKER_REPO/cqs:$RELEASE_VERSION
 helm package -d docs helm
 helm repo index docs --merge docs/index.yaml --url https://translatorsri.github.io/CQS
 
+git commit -m "incrementing version" Cargo.toml docs/index.yaml helm/Chart.yaml helm/values.yaml
+git add docs/cqs-$RELEASE_VERSION.tgz
+git commit -m "initial commit" docs/cqs-$RELEASE_VERSION.tgz
