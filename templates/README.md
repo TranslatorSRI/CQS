@@ -18,6 +18,8 @@ The CQS was conceptualized by the Translator Clinical Data Committee, but initia
 - Create a PR.
 6. The new CQS template will then be deployed to DEV, thus entering the Translator pipeline.
 
+*See https://github.com/NCATSTranslator/OperationsAndWorkflows/tree/main/schema for valid TRAPI operations and workflows.*
+
 **The nomenclature for CQS templates is as follows:**
 
 Human-readable format: MVP# Template # (infores)
