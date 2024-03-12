@@ -34,12 +34,27 @@ pub fn find_by_id(gid: i32) -> Result<Option<Job>, diesel::result::Error> {
 pub fn find_undone() -> Result<Vec<Job>, diesel::result::Error> {
     let mut conn = db::DB_POOL.get().expect("failed to get db connection from pool");
     let statement = jobs
-        .filter(status.ne(JobStatus::Completed).and(status.ne(JobStatus::Failed)))
+        .filter(status.eq(JobStatus::Queued))
         .order(date_submitted.asc())
+        // .limit(1)
         .select(Job::as_select());
     // debug!("{}", diesel::debug_query::<diesel::pg::Pg, _>(&statement).to_string());
     let results = statement.load(&mut conn).expect("failed to find all");
     Ok(results)
+}
+
+#[allow(dead_code)]
+pub fn reset_running() -> Result<(), diesel::result::Error> {
+    let mut conn = db::DB_POOL.get().expect("failed to get db connection from pool");
+    let statement = jobs.filter(status.eq(JobStatus::Running)).order(date_submitted.asc()).select(Job::as_select());
+    // debug!("{}", diesel::debug_query::<diesel::pg::Pg, _>(&statement).to_string());
+    let mut results = statement.load(&mut conn).expect("failed to find all");
+    for job in results.iter_mut() {
+        job.date_started = None;
+        job.status = JobStatus::Queued;
+        update(job).expect(format!("Could not update Job: {}", job.id).as_str());
+    }
+    Ok(())
 }
 
 pub fn insert(new_job: &NewJob) -> Result<i32, diesel::result::Error> {
