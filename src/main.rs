@@ -16,11 +16,12 @@ use futures::future::join_all;
 use merge_hashmap::Merge;
 use rocket::response::status;
 use rocket::serde::json::Json;
-use rocket::{tokio, Build, Rocket, State};
+use rocket::{Build, Rocket, State};
 use rocket_okapi::okapi::openapi3::*;
 use rocket_okapi::{mount_endpoints_and_merged_docs, openapi, openapi_get_routes_spec, swagger_ui::*};
 use std::env;
 use std::time::Duration;
+use tokio::time::timeout;
 use trapi_model_rs::{AsyncQuery, AsyncQueryResponse, AsyncQueryStatusResponse, KnowledgeType, Query};
 
 mod db;
@@ -168,13 +169,28 @@ async fn main() {
 
     db::init_db().expect("failed to initialize the db");
 
-    let start = tokio::time::Instant::now() + Duration::from_secs(10);
+    let start = tokio::time::Instant::now() + Duration::from_secs(5);
     tokio::task::spawn(async move {
-        let mut interval_timer = tokio::time::interval_at(start, chrono::Duration::seconds(30).to_std().unwrap());
+        let mut interval_timer = tokio::time::interval_at(start, Duration::from_secs(600));
+        loop {
+            interval_timer.tick().await;
+            let res = timeout(Duration::from_secs(30), delete_stale_asyncquery_jobs()).await;
+            if res.is_err() {
+                warn!("deleting asyncquery jobs timed out");
+            }
+        }
+    });
+
+    let start = tokio::time::Instant::now() + Duration::from_secs(15);
+    tokio::task::spawn(async move {
+        let mut interval_timer = tokio::time::interval_at(start, Duration::from_secs(30));
         loop {
             // Wait for the next interval tick
             interval_timer.tick().await;
-            process_asyncqueries().await;
+            let res = timeout(Duration::from_secs(300), process_asyncqueries()).await;
+            if res.is_err() {
+                warn!("processing asyncqueries timed out");
+            }
         }
     });
 
@@ -183,6 +199,21 @@ async fn main() {
         Ok(_) => info!("Rocket shut down gracefully."),
         Err(err) => warn!("Rocket had an error: {}", err),
     };
+}
+
+async fn delete_stale_asyncquery_jobs() {
+    debug!("deleting stale asyncquery jobs");
+    if let Ok(jobs) = job_actions::find_all(None) {
+        let now = Utc::now().naive_utc();
+        jobs.iter()
+            .filter(|j| {
+                let diff = now - j.date_submitted;
+                diff.num_seconds() > 7200
+            })
+            .for_each(|j| {
+                job_actions::delete(&j.id).expect(format!("Could not delete job id: {}", j.id).as_str());
+            });
+    }
 }
 
 async fn process_asyncqueries() {
@@ -196,104 +227,94 @@ async fn process_asyncqueries() {
             job_actions::update(job).expect(format!("Could not update Job: {}", job.id).as_str());
         };
 
-        let a_job_is_running = undone_jobs.iter().any(|a| a.status == JobStatus::Running);
-        match a_job_is_running {
-            true => {
-                debug!("A job is currently running.");
+        for job in undone_jobs.iter_mut() {
+            info!("Processing Job: {}", job.id);
+
+            job.date_started = Some(Utc::now().naive_utc());
+            job.status = JobStatus::Running;
+            job_actions::update(job).expect(format!("Could not update Job: {}", job.id).as_str());
+
+            let query: AsyncQuery = serde_json::from_str(&*String::from_utf8_lossy(job.query.as_slice())).expect("Could not deserialize AsyncQuery");
+
+            let mut responses: Vec<trapi_model_rs::Response> = vec![];
+
+            if let Some(query_graph) = &query.message.query_graph {
+                if let Some((_edge_key, edge_value)) = &query_graph.edges.iter().find(|(_k, v)| {
+                    if let (Some(predicates), Some(knowledge_type)) = (&v.predicates, &v.knowledge_type) {
+                        if predicates.contains(&"biolink:treats".to_string()) && knowledge_type == &KnowledgeType::INFERRED {
+                            return true;
+                        }
+                    }
+                    return false;
+                }) {
+                    if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
+                        if let Some(ids) = &node_value.ids {
+                            let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES.iter().map(|cqs_query| process(cqs_query, &ids, &reqwest_client)).collect();
+                            let joined_future_responses = join_all(future_responses).await;
+                            joined_future_responses
+                                .into_iter()
+                                .filter_map(std::convert::identity)
+                                .for_each(|trapi_response| responses.push(trapi_response));
+                        }
+                    }
+                }
             }
-            false => {
-                if let Some(job) = undone_jobs.iter_mut().next() {
-                    // info!("Sending Job: {} to WFR: {}", job.id, workflow_runner_url);
 
-                    job.date_started = Some(Utc::now().naive_utc());
-                    job.status = JobStatus::Running;
-                    job_actions::update(job).expect(format!("Could not update Job: {}", job.id).as_str());
+            if responses.is_empty() {
+                update_job(job, JobStatus::Failed);
+            } else {
+                let mut message = query.message.clone();
 
-                    let query: AsyncQuery = serde_json::from_str(&*String::from_utf8_lossy(job.query.as_slice())).expect("Could not deserialize AsyncQuery");
+                responses.into_iter().for_each(|r| {
+                    message.merge(r.message);
+                });
 
-                    let mut responses: Vec<trapi_model_rs::Response> = vec![];
+                util::group_results(&mut message);
+                util::sort_analysis_by_score(&mut message);
+                util::sort_results_by_analysis_score(&mut message);
 
-                    if let Some(query_graph) = &query.message.query_graph {
-                        if let Some((_edge_key, edge_value)) = &query_graph.edges.iter().find(|(_k, v)| {
-                            if let (Some(predicates), Some(knowledge_type)) = (&v.predicates, &v.knowledge_type) {
-                                if predicates.contains(&"biolink:treats".to_string()) && knowledge_type == &KnowledgeType::INFERRED {
-                                    return true;
+                // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
+                // let message_with_score_attributes = util::add_composite_score_attributes(message, node_binding_to_log_odds_map);
+                // let mut ret = trapi_model_rs::Response::new(message_with_score_attributes);
+                let mut ret = trapi_model_rs::Response::new(message);
+                ret.status = Some("Success".to_string());
+                ret.workflow = query.workflow.clone();
+                ret.biolink_version = Some(env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string()));
+                ret.schema_version = Some(env::var("SCHEMA_VERSION").unwrap_or("1.4.0".to_string()));
+
+                job.response = Some(serde_json::to_string(&ret).unwrap().into_bytes());
+                update_job(job, JobStatus::Completed);
+
+                // 1st attempt
+                info!("1st attempt at sending response to: {}", &query.callback);
+                match reqwest_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
+                    Ok(first_attempt_callback_response) => {
+                        let first_attempt_status_code = first_attempt_callback_response.status();
+                        debug!("first_attempt_status_code: {}", first_attempt_status_code);
+                        if !first_attempt_status_code.is_success() {
+                            // update_job(job, JobStatus::Failed);
+                            warn!("failed to make 1st callback post");
+                            tokio::time::sleep(Duration::from_secs(10)).await;
+                            // 2st attempt
+                            info!("2nd attempt at sending response to: {}", &query.callback);
+                            match reqwest_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
+                                Ok(second_attempt_callback_response) => {
+                                    let second_attempt_status_code = second_attempt_callback_response.status();
+                                    debug!("second_attempt_status_code: {}", second_attempt_status_code);
+                                    if second_attempt_status_code.is_success() {
+                                        // update_job(job, JobStatus::Completed);
+                                    } else {
+                                        warn!("failed to make 2nd callback post");
+                                    }
                                 }
-                            }
-                            return false;
-                        }) {
-                            if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
-                                if let Some(ids) = &node_value.ids {
-                                    let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES.iter().map(|cqs_query| process(cqs_query, &ids, &reqwest_client)).collect();
-                                    let joined_future_responses = join_all(future_responses).await;
-                                    joined_future_responses
-                                        .into_iter()
-                                        .filter_map(std::convert::identity)
-                                        .for_each(|trapi_response| responses.push(trapi_response));
+                                Err(e) => {
+                                    warn!("2nd attempt at callback error: {}", e);
                                 }
                             }
                         }
                     }
-
-                    if responses.is_empty() {
-                        update_job(job, JobStatus::Failed);
-                    } else {
-                        let mut message = query.message.clone();
-
-                        responses.into_iter().for_each(|r| {
-                            message.merge(r.message);
-                        });
-
-                        util::group_results(&mut message);
-                        util::sort_analysis_by_score(&mut message);
-                        util::sort_results_by_analysis_score(&mut message);
-
-                        // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
-                        // let message_with_score_attributes = util::add_composite_score_attributes(message, node_binding_to_log_odds_map);
-                        // let mut ret = trapi_model_rs::Response::new(message_with_score_attributes);
-                        let mut ret = trapi_model_rs::Response::new(message);
-                        ret.status = Some("Success".to_string());
-                        ret.workflow = query.workflow.clone();
-                        ret.biolink_version = Some(env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string()));
-                        ret.schema_version = Some(env::var("SCHEMA_VERSION").unwrap_or("1.4.0".to_string()));
-
-                        // fs::write(Path::new("/tmp/zxcv.json"), &serde_json::to_string_pretty(&ret).unwrap()).unwrap();
-
-                        job.response = Some(serde_json::to_string(&ret).unwrap().into_bytes());
-                        update_job(job, JobStatus::Completed);
-
-                        // 1st attempt
-                        info!("1st attempt at sending response to: {}", &query.callback);
-                        match reqwest_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
-                            Ok(first_attempt_callback_response) => {
-                                let first_attempt_status_code = first_attempt_callback_response.status();
-                                debug!("first_attempt_status_code: {}", first_attempt_status_code);
-                                if !first_attempt_status_code.is_success() {
-                                    // update_job(job, JobStatus::Failed);
-                                    warn!("failed to make 1st callback post");
-                                    tokio::time::sleep(Duration::from_secs(10)).await;
-                                    // 2st attempt
-                                    info!("2nd attempt at sending response to: {}", &query.callback);
-                                    match reqwest_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
-                                        Ok(second_attempt_callback_response) => {
-                                            let second_attempt_status_code = second_attempt_callback_response.status();
-                                            debug!("second_attempt_status_code: {}", second_attempt_status_code);
-                                            if second_attempt_status_code.is_success() {
-                                                // update_job(job, JobStatus::Completed);
-                                            } else {
-                                                warn!("failed to make 2nd callback post");
-                                            }
-                                        }
-                                        Err(e) => {
-                                            warn!("2nd attempt at callback error: {}", e);
-                                        }
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                warn!("1st attempt at callback error: {}", e);
-                            }
-                        }
+                    Err(e) => {
+                        warn!("1st attempt at callback error: {}", e);
                     }
                 }
             }
