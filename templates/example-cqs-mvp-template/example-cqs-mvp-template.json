@@ -12,7 +12,7 @@
             "edges": {
                 "e0": {
                     "predicates": [
-                        "biolink:was_applied_to_treat"
+                        "biolink:applied_to_treat"
                     ],
                     "subject": "n0",
                     "object": "n1",
