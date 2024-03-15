@@ -13,7 +13,7 @@ The CQS was conceptualized by the Translator Clinical Data Committee, but initia
 3. Test the CQS template by direct query of the KP.
 4. Create a branch in the CQS repo.
 - Add a new template folder within CQS/templates.
-- Within that folder, add a thoroughly descriptive README with a POC and select CURIES to be used for development and testing. Those CURIES should be associated with test assets that the KP developers contributed to the test assets repo, using [this G-sheet](https://docs.google.com/spreadsheets/d/1wAQaFEtFqAvp2fbTZIe-2ObF9zUU_cmXILfU8SzUWe0/edit?usp=drive_link).
+- Within that folder, add a thoroughly descriptive README with a POC and select CURIES to be used for development and testing. The CURIES should be associated with test assets that the POC has contributed to the test assets repo, using [this G-sheet](https://docs.google.com/spreadsheets/d/1wAQaFEtFqAvp2fbTZIe-2ObF9zUU_cmXILfU8SzUWe0/edit?usp=drive_link).
 - Also add a new CQS template structured as a valid TRAPI.
 - Create a PR.
 6. The new CQS template will then be deployed to DEV, thus entering the Translator pipeline.
