@@ -20,7 +20,7 @@
                         {
                          "id": "biolink:evidence_count",   
                          "operator": ">",
-                         "value": "20"            
+                         "value": 20            
                         }
                     ]
                 }
