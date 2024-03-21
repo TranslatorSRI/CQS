@@ -39,7 +39,7 @@ The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in F
 
 ## CQS Implementation Plan
 
-The initial implememtation plan for the CQS can be found here: https://github.com/NCATSTranslator/Clinical-Data-Committee-Tracking-Voting/issues/17..
+The initial implememtation plan for the CQS can be found here: https://github.com/NCATSTranslator/Clinical-Data-Committee-Tracking-Voting/issues/17.
 
 Please refer to the [wiki](https://github.com/TranslatorSRI/CQS/wiki) for more detailed technical documentation (to be added).
 
