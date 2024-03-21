@@ -1,10 +1,13 @@
 {
-    "workflow": [                                             
+    "workflow": [
         {
             "id": "lookup",
             "runner_parameters": {
-                "allowlist": ["infores:service-provider-trapi"]  
+                "allowlist": ["infores:service-provider-trapi"]
             }
+        },
+        {
+            "id":"score"
         }
     ],
     "message": {
