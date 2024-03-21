@@ -1,10 +1,13 @@
 {
-    "workflow": [                                             
+    "workflow": [
         {
             "id": "lookup",
             "runner_parameters": {
-                "allowlist": ["infores:biothings-explorer"]  
+                "allowlist": ["infores:service-provider-trapi"]
             }
+        },
+        {
+            "id":"score"
         }
     ],
     "message": {
@@ -20,7 +23,7 @@
                         {
                          "id": "biolink:evidence_count",   
                          "operator": ">",
-                         "value": "20"            
+                         "value": 20            
                         }
                     ]
                 }
