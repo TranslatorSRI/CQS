@@ -13,9 +13,9 @@ diesel::table! {
     jobs (id) {
         id -> Int4,
         status -> JobStatusType,
-        date_submitted -> Timestamp,
-        date_started -> Nullable<Timestamp>,
-        date_finished -> Nullable<Timestamp>,
+        date_submitted -> Timestamptz,
+        date_started -> Nullable<Timestamptz>,
+        date_finished -> Nullable<Timestamptz>,
         query -> Bytea,
         response -> Nullable<Bytea>,
     }
