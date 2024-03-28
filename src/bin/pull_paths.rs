@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         TRAPIPath {
             file: path::PathBuf::from("paths/Path_A/Path_A_e0-e1-e2-allowlist.json"),
             node: "n0".to_string(),
-            output: "path_a.template.json".to_string(),
+            output: "mvp1-template1-clinical-kps.json".to_string(),
         },
         TRAPIPath {
             file: path::PathBuf::from("paths/Path_B/Path_B_TRAPI.json"),
@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         TRAPIPath {
             file: path::PathBuf::from("paths/Path_E/path_e_query.json"),
             node: "n1".to_string(),
-            output: "path_e.template.json".to_string(),
+            output: "mvp1-template3-openpredict.json".to_string(),
         },
     ];
 
