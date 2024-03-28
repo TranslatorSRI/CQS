@@ -72,7 +72,7 @@ macro_rules! impl_wrapper {
             }
 
             fn render_query_template(&self, ids: &Vec<trapi_model_rs::CURIE>) -> Query {
-                let file = format!("./src/data/path_{}.template.json", $bar.to_string());
+                let file = format!("./src/data/{}.json", $bar.to_string());
                 let parser = liquid::ParserBuilder::with_stdlib().build().unwrap().parse_file(file).unwrap();
 
                 let globals = liquid::object!({
@@ -91,8 +91,6 @@ macro_rules! impl_wrapper {
     };
 }
 
-impl_wrapper!(CQSQueryA, "a", "n0", "e0", "n1", "n3", "n0", compute_composite_score);
-// impl_wrapper!(CQSQueryB, "b", "n0", "e0", "n1", "n3", "n0", compute_composite_score);
-// impl_wrapper!(CQSQueryC, "c", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
-// impl_wrapper!(CQSQueryD, "d", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
-impl_wrapper!(CQSQueryE, "e", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
+impl_wrapper!(CQSQueryA, "mvp1-template1-clinical-kps", "n0", "e0", "n1", "n3", "n0", compute_composite_score);
+impl_wrapper!(CQSQueryB, "mvp1-template3-openpredict", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
+impl_wrapper!(CQSQueryC, "mvp1-template4-bte-aeolus", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
