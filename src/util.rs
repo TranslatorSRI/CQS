@@ -395,7 +395,7 @@ pub fn build_http_client() -> reqwest::Client {
 #[cfg(test)]
 mod test {
     use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
-    use crate::scoring::{CQSQuery, CQSQueryA, CQSQueryB, CQSQueryD};
+    use crate::scoring::{CQSQuery, CQSQueryA, CQSQueryB};
     use crate::util;
     use crate::util::{add_support_graphs, build_node_binding_to_log_odds_data_map};
     use hyper::body::HttpBody;
@@ -473,8 +473,12 @@ mod test {
         // let curie_token = serde_json::to_value(&ids).unwrap();
         // let asdf = liquid::model::value!(ids);
 
-        let template = liquid::ParserBuilder::with_stdlib().build().unwrap().parse_file("./src/data/path_a.template.json").unwrap();
-        // let template = liquid::ParserBuilder::with_stdlib().build().unwrap().parse_file("/tmp/path_a.template.json").unwrap();
+        let template = liquid::ParserBuilder::with_stdlib()
+            .build()
+            .unwrap()
+            .parse_file("data/mvp1-template1-clinical-kps.json")
+            .unwrap();
+        // let template = liquid::ParserBuilder::with_stdlib().build().unwrap().parse_file("/tmp/mvp1-template1-clinical-kps.json").unwrap();
 
         let mut globals = liquid::object!({
             "curies": ids
@@ -674,7 +678,7 @@ mod test {
             },
         ];
 
-        let cqs_query = CQSQueryD::new();
+        let cqs_query = CQSQueryA::new();
         let score = cqs_query.compute_score(&values);
         let normalized_score = score.atan() * 2.0 / std::f64::consts::PI;
         println!("score: {:?}, normalized_score: {:?}", score, normalized_score);
