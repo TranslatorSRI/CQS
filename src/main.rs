@@ -10,10 +10,15 @@ extern crate log;
 extern crate lazy_static;
 
 use crate::model::{JobStatus, NewJob};
+use async_once::AsyncOnce;
 use chrono::Utc;
+use diesel_async::pooled_connection::bb8::Pool;
+use diesel_async::pooled_connection::AsyncDieselConnectionManager;
+use diesel_async::AsyncPgConnection;
 use dotenvy::dotenv;
 use futures::future::join_all;
 use merge_hashmap::Merge;
+use rocket::fairing::AdHoc;
 use rocket::response::status;
 use rocket::serde::json::Json;
 use rocket::{Build, Rocket, State};
@@ -23,8 +28,8 @@ use std::env;
 use std::time::Duration;
 use tokio::time::timeout;
 use trapi_model_rs::{AsyncQuery, AsyncQueryResponse, AsyncQueryStatusResponse, KnowledgeType, Query};
+// use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
-mod db;
 mod job_actions;
 mod model;
 mod openapi;
@@ -35,11 +40,15 @@ mod util;
 lazy_static! {
     pub static ref WHITELISTED_CANNED_QUERIES: Vec<Box<dyn scoring::CQSQuery>> = vec![
         Box::new(scoring::CQSQueryA::new()),
-        // Box::new(scoring::CQSQueryB::new()),
-        // Box::new(scoring::CQSQueryC::new()),
-        // Box::new(scoring::CQSQueryD::new()),
-        Box::new(scoring::CQSQueryE::new())
+        Box::new(scoring::CQSQueryB::new()),
+        Box::new(scoring::CQSQueryC::new()),
     ];
+    pub static ref DB_POOL: AsyncOnce<bb8::Pool<AsyncDieselConnectionManager<AsyncPgConnection>>> = AsyncOnce::new(async {
+        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
+        let pool = Pool::builder().connection_timeout(Duration::from_secs(120)).build(config).await;
+        pool.unwrap()
+    });
 }
 
 #[openapi]
@@ -57,7 +66,7 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
             return false;
         }) {
             let job = NewJob::new(JobStatus::Queued, serde_json::to_string(&query).unwrap().into_bytes());
-            let job_id = job_actions::insert(&job).expect("did not insert");
+            let job_id = job_actions::insert(&job).await.expect("did not insert");
             let mut ret = AsyncQueryResponse::new(job_id.to_string());
             ret.status = Some(JobStatus::Queued.to_string());
             return Ok(Json(ret));
@@ -78,21 +87,23 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
 #[get("/asyncquery_status/<job_id>")]
 async fn asyncquery_status(job_id: i32) -> Result<Json<AsyncQueryStatusResponse>, status::BadRequest<String>> {
     debug!("job id: {}", job_id);
-    if let Some(job) = job_actions::find_by_id(job_id).expect("Could not find Job") {
-        let mut status_response = AsyncQueryStatusResponse {
-            status: job.status.to_string(),
-            description: job.status.to_string(),
-            logs: vec![],
-            response_url: Some(format!("{}/download/{}", env::var("RESPONSE_URL").unwrap_or("http://localhost:8000".to_string()), job.id)),
-        };
+    if let Ok(job_result) = job_actions::find_by_id(job_id).await {
+        if let Some(job) = job_result {
+            let mut status_response = AsyncQueryStatusResponse {
+                status: job.status.to_string(),
+                description: job.status.to_string(),
+                logs: vec![],
+                response_url: Some(format!("{}/download/{}", env::var("RESPONSE_URL").unwrap_or("http://localhost:8000".to_string()), job.id)),
+            };
 
-        if let Some(job_response) = job.response {
-            let response: trapi_model_rs::Response = serde_json::from_str(&*String::from_utf8_lossy(job_response.as_slice())).unwrap();
-            if let Some(logs) = response.logs {
-                status_response.logs = logs.clone();
+            if let Some(job_response) = job.response {
+                let response: trapi_model_rs::Response = serde_json::from_str(&*String::from_utf8_lossy(job_response.as_slice())).unwrap();
+                if let Some(logs) = response.logs {
+                    status_response.logs = logs.clone();
+                }
             }
+            return Ok(Json(status_response));
         }
-        return Ok(Json(status_response));
     }
     return Err(status::BadRequest("Job not found".to_string()));
 }
@@ -150,7 +161,7 @@ async fn query(data: Json<Query>, reqwest_client: &State<reqwest::Client>) -> Js
 #[openapi]
 #[get("/download/<job_id>")]
 async fn download(job_id: i32) -> Result<Json<trapi_model_rs::Response>, status::BadRequest<String>> {
-    if let Ok(job_result) = job_actions::find_by_id(job_id) {
+    if let Ok(job_result) = job_actions::find_by_id(job_id).await {
         if let Some(job) = job_result {
             if let Some(job_response) = job.response {
                 let response: trapi_model_rs::Response = serde_json::from_str(&*String::from_utf8_lossy(job_response.as_slice())).unwrap();
@@ -164,36 +175,7 @@ async fn download(job_id: i32) -> Result<Json<trapi_model_rs::Response>, status:
 #[rocket::main]
 async fn main() {
     dotenv().ok();
-
     env_logger::init();
-
-    db::init_db().expect("failed to initialize the db");
-
-    let start = tokio::time::Instant::now() + Duration::from_secs(5);
-    tokio::task::spawn(async move {
-        let mut interval_timer = tokio::time::interval_at(start, Duration::from_secs(600));
-        loop {
-            interval_timer.tick().await;
-            let res = timeout(Duration::from_secs(30), delete_stale_asyncquery_jobs()).await;
-            if res.is_err() {
-                warn!("deleting asyncquery jobs timed out");
-            }
-        }
-    });
-
-    let start = tokio::time::Instant::now() + Duration::from_secs(15);
-    tokio::task::spawn(async move {
-        let mut interval_timer = tokio::time::interval_at(start, Duration::from_secs(30));
-        loop {
-            // Wait for the next interval tick
-            interval_timer.tick().await;
-            let res = timeout(Duration::from_secs(300), process_asyncqueries()).await;
-            if res.is_err() {
-                warn!("processing asyncqueries timed out");
-            }
-        }
-    });
-
     let launch_result = create_server().launch().await;
     match launch_result {
         Ok(_) => info!("Rocket shut down gracefully."),
@@ -201,38 +183,86 @@ async fn main() {
     };
 }
 
+pub fn create_server() -> Rocket<Build> {
+    let client = util::build_http_client();
+    let mut building_rocket = rocket::build()
+        .mount(
+            "/docs/",
+            make_swagger_ui(&SwaggerUIConfig {
+                url: "../openapi.json".to_owned(),
+                ..Default::default()
+            }),
+        )
+        .attach(AdHoc::on_liftoff("delete stale asyncquery jobs", |_| {
+            Box::pin(async move {
+                let start = tokio::time::Instant::now() + Duration::from_secs(5);
+                tokio::task::spawn(async move {
+                    let mut interval_timer = tokio::time::interval_at(start, Duration::from_secs(600));
+                    loop {
+                        interval_timer.tick().await;
+                        let res = timeout(Duration::from_secs(30), delete_stale_asyncquery_jobs()).await;
+                        if res.is_err() {
+                            warn!("deleting asyncquery jobs timed out");
+                        }
+                    }
+                });
+            })
+        }))
+        .attach(AdHoc::on_liftoff("process asyncquery jobs", |_| {
+            Box::pin(async move {
+                let start = tokio::time::Instant::now() + Duration::from_secs(15);
+                tokio::task::spawn(async move {
+                    let mut interval_timer = tokio::time::interval_at(start, Duration::from_secs(30));
+                    loop {
+                        interval_timer.tick().await;
+                        let res = timeout(Duration::from_secs(300), process_asyncquery_jobs()).await;
+                        if res.is_err() {
+                            warn!("processing asyncqueries timed out");
+                        }
+                    }
+                });
+            })
+        }))
+        .manage(client);
+
+    let openapi_settings = rocket_okapi::settings::OpenApiSettings::default();
+    let custom_route_spec = (vec![], openapi::custom_openapi_spec());
+    mount_endpoints_and_merged_docs! {
+        building_rocket, "/".to_owned(), openapi_settings,
+        "/external" => custom_route_spec,
+        "" => get_routes_and_docs(&openapi_settings),
+    };
+    building_rocket
+}
+
 async fn delete_stale_asyncquery_jobs() {
     debug!("deleting stale asyncquery jobs");
-    if let Ok(jobs) = job_actions::find_all(None) {
+    // let mut connection = AsyncPgConnection::establish(&std::env::var("DATABASE_URL")?).await?;
+    if let Ok(jobs) = job_actions::find_all(None).await {
         let now = Utc::now().naive_utc();
-        jobs.iter()
+        let futures: Vec<_> = jobs
+            .iter()
             .filter(|j| {
                 let diff = now - j.date_submitted;
                 diff.num_seconds() > 7200
             })
-            .for_each(|j| {
-                job_actions::delete(&j.id).expect(format!("Could not delete job id: {}", j.id).as_str());
-            });
+            .map(|j| job_actions::delete(&j.id))
+            .collect();
+        let _ = join_all(futures);
     }
 }
 
-async fn process_asyncqueries() {
+async fn process_asyncquery_jobs() {
     debug!("processing asyncquery jobs");
     let reqwest_client = util::build_http_client();
 
-    if let Ok(mut undone_jobs) = job_actions::find_undone() {
-        let update_job = |job: &mut model::Job, job_status: JobStatus| {
-            job.date_finished = Some(Utc::now().naive_utc());
-            job.status = job_status;
-            job_actions::update(job).expect(format!("Could not update Job: {}", job.id).as_str());
-        };
-
+    if let Ok(mut undone_jobs) = job_actions::find_undone().await {
         for job in undone_jobs.iter_mut() {
             info!("Processing Job: {}", job.id);
 
             job.date_started = Some(Utc::now().naive_utc());
             job.status = JobStatus::Running;
-            job_actions::update(job).expect(format!("Could not update Job: {}", job.id).as_str());
+            job_actions::update(job).await;
 
             let query: AsyncQuery = serde_json::from_str(&*String::from_utf8_lossy(job.query.as_slice())).expect("Could not deserialize AsyncQuery");
 
@@ -261,7 +291,9 @@ async fn process_asyncqueries() {
             }
 
             if responses.is_empty() {
-                update_job(job, JobStatus::Failed);
+                job.date_finished = Some(Utc::now().naive_utc());
+                job.status = JobStatus::Failed;
+                job_actions::update(job).await;
             } else {
                 let mut message = query.message.clone();
 
@@ -283,7 +315,9 @@ async fn process_asyncqueries() {
                 ret.schema_version = Some(env::var("SCHEMA_VERSION").unwrap_or("1.4.0".to_string()));
 
                 job.response = Some(serde_json::to_string(&ret).unwrap().into_bytes());
-                update_job(job, JobStatus::Completed);
+                job.date_finished = Some(Utc::now().naive_utc());
+                job.status = JobStatus::Completed;
+                job_actions::update(job).await;
 
                 // 1st attempt
                 info!("1st attempt at sending response to: {}", &query.callback);
@@ -322,28 +356,6 @@ async fn process_asyncqueries() {
     } else {
         warn!("No Jobs to run");
     }
-}
-
-pub fn create_server() -> Rocket<Build> {
-    let client = util::build_http_client();
-    let mut building_rocket = rocket::build()
-        .mount(
-            "/docs/",
-            make_swagger_ui(&SwaggerUIConfig {
-                url: "../openapi.json".to_owned(),
-                ..Default::default()
-            }),
-        )
-        .manage(client);
-
-    let openapi_settings = rocket_okapi::settings::OpenApiSettings::default();
-    let custom_route_spec = (vec![], openapi::custom_openapi_spec());
-    mount_endpoints_and_merged_docs! {
-        building_rocket, "/".to_owned(), openapi_settings,
-        "/external" => custom_route_spec,
-        "" => get_routes_and_docs(&openapi_settings),
-    };
-    building_rocket
 }
 
 async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, ids: &Vec<trapi_model_rs::CURIE>, reqwest_client: &reqwest::Client) -> Option<trapi_model_rs::Response> {
