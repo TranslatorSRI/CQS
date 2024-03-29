@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 VERSION=`yq .package.version Cargo.toml`
 DOCKER_REPO="ghcr.io/translatorsri"
 
