@@ -93,4 +93,4 @@ macro_rules! impl_wrapper {
 
 impl_wrapper!(CQSQueryA, "mvp1-template1-clinical-kps", "n0", "e0", "n1", "n3", "n0", compute_composite_score);
 impl_wrapper!(CQSQueryB, "mvp1-template3-openpredict", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
-impl_wrapper!(CQSQueryC, "mvp1-template4-bte-aeolus", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
+impl_wrapper!(CQSQueryC, "mvp1-template5-service-provider-aeolus", "n0", "e0", "n1", "n0", "n1", compute_composite_score);
