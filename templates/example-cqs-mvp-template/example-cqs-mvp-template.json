@@ -1,3 +1,6 @@
+#infores:primary-knowledge-source = infores:biothings-explorer
+#infores:aggregator-knowledge-source = infores:cqs
+
 {
     "workflow": [                                             
         {
