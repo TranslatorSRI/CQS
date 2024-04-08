@@ -6,8 +6,8 @@ use reqwest::header;
 use reqwest::redirect::Policy;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
+use std::env;
 use std::time::Duration;
-use std::{env, error};
 use trapi_model_rs::{Analysis, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, Message, NodeBinding, ResourceRoleEnum, Response, RetrievalSource};
 
 #[allow(dead_code)]
@@ -362,34 +362,62 @@ pub fn group_results(message: &mut Message) {
     message.results = Some(new_results);
 }
 
-pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &crate::Query) -> Result<trapi_model_rs::Response, Box<dyn error::Error + Send + Sync>> {
+pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &crate::Query, cqs_query_name: &String) -> Option<trapi_model_rs::Response> {
     let workflow_runner_url = format!(
         "{}/query",
         env::var("WORKFLOW_RUNNER_URL").unwrap_or("https://translator-workflow-runner.renci.org".to_string())
     );
 
-    let response_result = client.post(workflow_runner_url).json(query).send().await;
-    match response_result {
-        Ok(response) => {
-            debug!("response.status(): {}", response.status());
-            let data = response.text().await?;
-            let trapi_response: trapi_model_rs::Response = serde_json::from_str(data.as_str()).expect("could not parse Query");
-            Ok(trapi_response)
+    let backoff_multiplier = 2;
+    let retries = 3;
+
+    let mut trapi_response = None;
+    for attempt in 1..=retries {
+        debug!("attempt: {} for cqs_query.name(): {}", attempt, cqs_query_name);
+        let wfr_response_result = client.post(workflow_runner_url.clone()).json(query).send().await;
+        let wfr_response: Option<trapi_model_rs::Response> = match wfr_response_result {
+            Ok(response) => {
+                debug!("WFR response.status(): {} for query {} ", response.status(), cqs_query_name);
+                let result_data = response.text().await;
+                match result_data {
+                    Ok(data) => Some(serde_json::from_str(data.as_str()).expect("could not parse Query")),
+                    Err(e) => {
+                        warn!("Error reading response from WFR: {}", e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Failed to send query to WFR: {}", e);
+                None
+            }
+        };
+        if let Some(r) = wfr_response {
+            trapi_response = Some(r);
+            break;
+        } else {
+            let retry_backoff_sleep_duration = attempt * backoff_multiplier * 15;
+            debug!("retry_backoff_sleep_duration: {}", retry_backoff_sleep_duration);
+            tokio::time::sleep(Duration::from_secs(retry_backoff_sleep_duration)).await;
         }
-        Err(e) => Err(Box::new(e)),
     }
+    return trapi_response;
 }
 
 pub fn build_http_client() -> reqwest::Client {
     let mut headers = header::HeaderMap::new();
     headers.insert(header::ACCEPT, header::HeaderValue::from_static("application/json"));
     headers.insert(header::CONTENT_TYPE, header::HeaderValue::from_static("application/json"));
-    reqwest::Client::builder()
+    let reqwest_client = reqwest::Client::builder()
         .redirect(Policy::limited(3))
         .timeout(Duration::from_secs(900))
         .default_headers(headers)
         .build()
-        .expect("Could not build reqwest client")
+        .expect("Could not build reqwest client");
+    reqwest_client
+    // let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+    // let client = ClientBuilder::new(reqwest_client).with(RetryTransientMiddleware::new_with_policy(retry_policy)).build();
+    // client
 }
 
 #[cfg(test)]

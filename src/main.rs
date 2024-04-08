@@ -53,8 +53,8 @@ lazy_static! {
 
 #[openapi]
 #[post("/asyncquery", data = "<data>")]
-async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, status::BadRequest<String>> {
-    let query: AsyncQuery = data.into_inner();
+async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, status::Accepted<Json<AsyncQuery>>> {
+    let query: AsyncQuery = data.clone().into_inner();
 
     if let Some(query_graph) = &query.message.query_graph {
         if let Some((_edge_key, _edge_value)) = &query_graph.edges.iter().find(|(_k, v)| {
@@ -72,7 +72,7 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
             return Ok(Json(ret));
         }
     }
-    return Err(status::BadRequest("Invalid Query".to_string()));
+    Err(status::Accepted(data))
 }
 
 // #[openapi]
@@ -215,7 +215,7 @@ pub fn create_server() -> Rocket<Build> {
                     let mut interval_timer = tokio::time::interval_at(start, Duration::from_secs(30));
                     loop {
                         interval_timer.tick().await;
-                        let res = timeout(Duration::from_secs(300), process_asyncquery_jobs()).await;
+                        let res = timeout(Duration::from_secs(450), process_asyncquery_jobs()).await;
                         if res.is_err() {
                             warn!("processing asyncqueries timed out");
                         }
@@ -360,8 +360,8 @@ async fn process_asyncquery_jobs() {
 
 async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, ids: &Vec<trapi_model_rs::CURIE>, reqwest_client: &reqwest::Client) -> Option<trapi_model_rs::Response> {
     let canned_query: Query = cqs_query.render_query_template(ids);
-    info!("rendered query template {}: {}", cqs_query.name(), serde_json::to_string_pretty(&canned_query).unwrap());
-    let mut canned_query_response = util::post_query_to_workflow_runner(&reqwest_client, &canned_query).await.unwrap();
+    debug!("rendered query template {}: {}", cqs_query.name(), serde_json::to_string_pretty(&canned_query).unwrap());
+    let mut canned_query_response = util::post_query_to_workflow_runner(&reqwest_client, &canned_query, &cqs_query.name()).await.unwrap();
 
     match env::var("WRITE_WFR_OUTPUT").unwrap_or("false".to_string()).as_str() {
         "true" => {
