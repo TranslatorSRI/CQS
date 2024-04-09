@@ -53,7 +53,7 @@ lazy_static! {
 
 #[openapi]
 #[post("/asyncquery", data = "<data>")]
-async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, status::Accepted<Json<AsyncQuery>>> {
+async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, status::Custom<Json<AsyncQuery>>> {
     let query: AsyncQuery = data.clone().into_inner();
 
     if let Some(query_graph) = &query.message.query_graph {
@@ -72,7 +72,7 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
             return Ok(Json(ret));
         }
     }
-    Err(status::Accepted(data))
+    Err(status::Custom(rocket::http::Status::Ok, data))
 }
 
 // #[openapi]
