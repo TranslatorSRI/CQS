@@ -1,0 +1,35 @@
+{
+  "workflow": [
+    {
+      "id": "lookup",
+      "runner_parameters": {
+        "allowlist": ["infores:service-provider-trapi"]
+      }
+    },
+    {
+      "id": "score"
+    }
+  ],
+  "message": {
+    "query_graph": {
+      "edges": {
+        "e0": {
+          "predicates": ["biolink:treats_or_applied_or_studied_to_treat"],
+          "subject": "n0",
+          "object": "n1"
+        }
+      },
+      "nodes": {
+        "n0": {
+          "categories": ["biolink:ChemicalEntity"],
+          "is_set": false
+        },
+        "n1": {
+          "categories": ["biolink:DiseaseOrPhenotypicFeature"],
+          "ids": ["MONDO:0000000"],
+          "is_set": false
+        }
+      }
+    }
+  }
+}
