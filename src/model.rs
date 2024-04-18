@@ -4,9 +4,39 @@ use diesel::deserialize::FromSql;
 use diesel::pg::{Pg, PgValue};
 use diesel::serialize::{IsNull, Output, ToSql};
 use diesel::*;
+use rocket_okapi::okapi::schemars;
+use rocket_okapi::okapi::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::io::Write;
+use trapi_model_rs::{Query, RetrievalSource};
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct QueryTemplate {
+    pub workflow: Option<Vec<trapi_model_rs::Workflow>>,
+
+    pub message: trapi_model_rs::Message,
+
+    pub log_level: Option<trapi_model_rs::LogLevel>,
+
+    pub submitter: Option<String>,
+
+    pub bypass_cache: Option<bool>,
+
+    pub cqs_edge_source: Vec<RetrievalSource>,
+}
+
+impl QueryTemplate {
+    pub fn to_query(&self) -> Query {
+        Query {
+            workflow: self.workflow.clone(),
+            message: self.message.clone(),
+            log_level: self.log_level.clone(),
+            submitter: self.submitter.clone(),
+            bypass_cache: self.bypass_cache.clone(),
+        }
+    }
+}
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, FromSqlRow, AsExpression)]
 #[diesel(sql_type = crate::schema::sql_types::JobStatusType)]

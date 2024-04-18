@@ -1,48 +1,58 @@
 {
-    "workflow": [
-        {
-            "id": "lookup",
-            "runner_parameters": {
-                "allowlist": ["infores:service-provider-trapi"]
-            }
-        },
-        {
-            "id":"score"
-        }
-    ],
-    "message": {
-        "query_graph": {
-            "edges": {
-                "e0": {
-                    "predicates": [
-                        "biolink:applied_to_treat"
-                    ],
-                    "subject": "n0",
-                    "object": "n1",
-                    "attribute_constraints": [
-                        {
-                         "id": "biolink:evidence_count",   
-                         "operator": ">",
-                         "value": 20            
-                        }
-                    ]
-                }
-            },
-            "nodes": {
-                "n0": {
-                    "categories": [
-                        "biolink:ChemicalEntity"
-                    ],
-                    "is_set": false
-                },
-                "n1": {
-                    "categories": [
-                        "biolink:DiseaseOrPhenotypicFeature"
-                    ],
-                    "ids": ["MONDO:0000000"],
-                    "is_set": false
-                }
-            }
-        }
+  "workflow": [
+    {
+      "id": "lookup",
+      "runner_parameters": {
+        "allowlist": [
+          "infores:service-provider-trapi"
+        ]
+      }
+    },
+    {
+      "id": "score"
     }
+  ],
+  "message": {
+    "query_graph": {
+      "edges": {
+        "e0": {
+          "predicates": [
+            "biolink:applied_to_treat"
+          ],
+          "subject": "n0",
+          "object": "n1",
+          "attribute_constraints": [
+            {
+              "id": "biolink:evidence_count",
+              "operator": ">",
+              "value": 20
+            }
+          ]
+        }
+      },
+      "nodes": {
+        "n0": {
+          "categories": [
+            "biolink:ChemicalEntity"
+          ],
+          "is_set": false
+        },
+        "n1": {
+          "categories": [
+            "biolink:DiseaseOrPhenotypicFeature"
+          ],
+          "ids": [
+            "MONDO:0000000"
+          ],
+          "is_set": false
+        }
+      }
+    }
+  },
+  "cqs_edge_source": [
+    {
+      "resource_id": "infores:cqs",
+      "resource_role": "primary_knowledge_source"
+    }
+  ]
 }

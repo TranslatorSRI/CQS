@@ -90,5 +90,11 @@
         }
       }
     }
-  }
+  },
+  "cqs_edge_source": [
+    {
+      "resource_id": "infores:cqs",
+      "resource_role": "primary_knowledge_source"
+    }
+  ]
 }

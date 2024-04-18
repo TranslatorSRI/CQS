@@ -1,4 +1,14 @@
 {
+  "workflow": [
+    {
+      "id": "lookup",
+      "runner_parameters": {
+        "allowlist": [
+          "infores:openpredict"
+        ]
+      }
+    }
+  ],
   "message": {
     "query_graph": {
       "edges": {
@@ -27,14 +37,10 @@
       }
     }
   },
-  "workflow": [
+  "cqs_edge_source": [
     {
-      "id": "lookup",
-      "runner_parameters": {
-        "allowlist": [
-          "infores:openpredict"
-        ]
-      }
+      "resource_id": "infores:cqs",
+      "resource_role": "primary_knowledge_source"
     }
   ]
 }

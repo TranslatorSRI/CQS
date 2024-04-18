@@ -1,6 +1,9 @@
-use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
-use crate::scoring;
+use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue, JobStatus, QueryTemplate};
+use crate::{job_actions, scoring, util, WHITELISTED_CANNED_QUERIES};
+use chrono::Utc;
+use futures::future::join_all;
 use itertools::Itertools;
+use merge_hashmap::Merge;
 use ordered_float::OrderedFloat;
 use reqwest::header;
 use reqwest::redirect::Policy;
@@ -8,7 +11,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::time::Duration;
-use trapi_model_rs::{Analysis, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, Message, NodeBinding, ResourceRoleEnum, Response, RetrievalSource};
+use trapi_model_rs::{Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, KnowledgeType, Message, NodeBinding, ResourceRoleEnum, Response};
 
 #[allow(dead_code)]
 pub fn build_node_binding_to_log_odds_data_map(message: Message) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
@@ -239,7 +242,7 @@ pub fn sort_results_by_analysis_score(message: &mut Message) {
     }
 }
 
-pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::CQSQuery>) {
+pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::CQSQuery>, query_template: &QueryTemplate) {
     let mut auxiliary_graphs: BTreeMap<String, AuxiliaryGraph> = BTreeMap::new();
 
     if let Some(results) = &mut response.message.results {
@@ -278,7 +281,7 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::
                             first_drug_node_id.id.clone(),
                             BiolinkPredicate::from("biolink:treats"),
                             first_disease_node_id.id.clone(),
-                            vec![RetrievalSource::new("infores:cqs".to_string(), ResourceRoleEnum::PrimaryKnowledgeSource)],
+                            query_template.cqs_edge_source.clone(),
                         );
                         new_edge.attributes = Some(vec![Attribute::new("biolink:support_graphs".to_string(), serde_json::Value::from(auxiliary_graph_ids))]);
                         // println!("new_edge: {:?}", new_edge);
@@ -362,7 +365,7 @@ pub fn group_results(message: &mut Message) {
     message.results = Some(new_results);
 }
 
-pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &crate::Query, cqs_query_name: &String) -> Option<trapi_model_rs::Response> {
+pub async fn process(reqwest_client: &reqwest::Client, cqs_query: &Box<dyn scoring::CQSQuery>, ids: &Vec<trapi_model_rs::CURIE>) -> Option<Response> {
     let workflow_runner_url = format!(
         "{}/query",
         env::var("WORKFLOW_RUNNER_URL").unwrap_or("https://translator-workflow-runner.renci.org".to_string())
@@ -371,13 +374,19 @@ pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &cra
     let backoff_multiplier = 2;
     let retries = 3;
 
+    let query_template: QueryTemplate = cqs_query.render_query_template(ids);
+
+    let query = query_template.to_query();
+    debug!("cqs_query {} being sent to WFR: {}", cqs_query.name(), serde_json::to_string_pretty(&query).unwrap());
+
     let mut trapi_response = None;
     for attempt in 1..=retries {
-        debug!("attempt: {} for cqs_query.name(): {}", attempt, cqs_query_name);
-        let wfr_response_result = client.post(workflow_runner_url.clone()).json(query).send().await;
-        let wfr_response: Option<trapi_model_rs::Response> = match wfr_response_result {
+        debug!("attempt: {} for cqs_query.name(): {}", attempt, cqs_query.name());
+
+        let wfr_response_result = reqwest_client.post(workflow_runner_url.clone()).json(&query).send().await;
+        let wfr_response: Option<Response> = match wfr_response_result {
             Ok(response) => {
-                debug!("WFR response.status(): {} for query {} ", response.status(), cqs_query_name);
+                debug!("WFR response.status(): {} for query {} ", response.status(), cqs_query.name());
                 let result_data = response.text().await;
                 match result_data {
                     Ok(data) => Some(serde_json::from_str(data.as_str()).expect("could not parse Query")),
@@ -401,7 +410,153 @@ pub async fn post_query_to_workflow_runner(client: &reqwest::Client, query: &cra
             tokio::time::sleep(Duration::from_secs(retry_backoff_sleep_duration)).await;
         }
     }
-    return trapi_response;
+
+    if let Some(mut tr) = trapi_response {
+        match env::var("WRITE_WFR_OUTPUT").unwrap_or("false".to_string()).as_str() {
+            "true" => {
+                let parent_dir = std::path::Path::new("/tmp/cqs");
+                if parent_dir.exists() {
+                    std::fs::write(
+                        std::path::Path::join(parent_dir, format!("template-{}-{}.json", cqs_query.name(), uuid::Uuid::new_v4().to_string()).as_str()),
+                        serde_json::to_string_pretty(&tr).unwrap(),
+                    )
+                    .expect("failed to write output");
+                }
+            }
+            _ => {}
+        };
+        add_support_graphs(&mut tr, cqs_query, &query_template);
+        Some(tr)
+    } else {
+        None
+    }
+
+    // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(canned_query_response.message.clone());
+    // let trapi_response = util::add_composite_score_attributes(canned_query_response, node_binding_to_log_odds_map, &cqs_query);
+    // Some(trapi_response)
+}
+
+pub async fn process_asyncquery_jobs() {
+    debug!("processing asyncquery jobs");
+    let reqwest_client = util::build_http_client();
+
+    if let Ok(mut undone_jobs) = job_actions::find_undone().await {
+        for job in undone_jobs.iter_mut() {
+            info!("Processing Job: {}", job.id);
+
+            job.date_started = Some(Utc::now().naive_utc());
+            job.status = JobStatus::Running;
+            job_actions::update(job).await;
+
+            let query: AsyncQuery = serde_json::from_str(&*String::from_utf8_lossy(job.query.as_slice())).expect("Could not deserialize AsyncQuery");
+
+            let mut responses: Vec<trapi_model_rs::Response> = vec![];
+
+            if let Some(query_graph) = &query.message.query_graph {
+                if let Some((_edge_key, edge_value)) = &query_graph.edges.iter().find(|(_k, v)| {
+                    if let (Some(predicates), Some(knowledge_type)) = (&v.predicates, &v.knowledge_type) {
+                        if predicates.contains(&"biolink:treats".to_string()) && knowledge_type == &KnowledgeType::INFERRED {
+                            return true;
+                        }
+                    }
+                    return false;
+                }) {
+                    if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
+                        if let Some(ids) = &node_value.ids {
+                            let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES.iter().map(|cqs_query| util::process(&reqwest_client, cqs_query, &ids)).collect();
+                            let joined_future_responses = join_all(future_responses).await;
+                            joined_future_responses
+                                .into_iter()
+                                .filter_map(std::convert::identity)
+                                .for_each(|trapi_response| responses.push(trapi_response));
+                        }
+                    }
+                }
+            }
+
+            if responses.is_empty() {
+                job.date_finished = Some(Utc::now().naive_utc());
+                job.status = JobStatus::Failed;
+                job_actions::update(job).await;
+            } else {
+                let mut message = query.message.clone();
+
+                responses.into_iter().for_each(|r| {
+                    message.merge(r.message);
+                });
+
+                group_results(&mut message);
+                sort_analysis_by_score(&mut message);
+                sort_results_by_analysis_score(&mut message);
+
+                // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
+                // let message_with_score_attributes = util::add_composite_score_attributes(message, node_binding_to_log_odds_map);
+                // let mut ret = trapi_model_rs::Response::new(message_with_score_attributes);
+                let mut ret = trapi_model_rs::Response::new(message);
+                ret.status = Some("Success".to_string());
+                ret.workflow = query.workflow.clone();
+                ret.biolink_version = Some(env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string()));
+                ret.schema_version = Some(env::var("TRAPI_VERSION").unwrap_or("1.4.0".to_string()));
+
+                job.response = Some(serde_json::to_string(&ret).unwrap().into_bytes());
+                job.date_finished = Some(Utc::now().naive_utc());
+                job.status = JobStatus::Completed;
+                job_actions::update(job).await;
+
+                // 1st attempt
+                info!("1st attempt at sending response to: {}", &query.callback);
+                match reqwest_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
+                    Ok(first_attempt_callback_response) => {
+                        let first_attempt_status_code = first_attempt_callback_response.status();
+                        debug!("first_attempt_status_code: {}", first_attempt_status_code);
+                        if !first_attempt_status_code.is_success() {
+                            // update_job(job, JobStatus::Failed);
+                            warn!("failed to make 1st callback post");
+                            tokio::time::sleep(Duration::from_secs(10)).await;
+                            // 2st attempt
+                            info!("2nd attempt at sending response to: {}", &query.callback);
+                            match reqwest_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
+                                Ok(second_attempt_callback_response) => {
+                                    let second_attempt_status_code = second_attempt_callback_response.status();
+                                    debug!("second_attempt_status_code: {}", second_attempt_status_code);
+                                    if second_attempt_status_code.is_success() {
+                                        // update_job(job, JobStatus::Completed);
+                                    } else {
+                                        warn!("failed to make 2nd callback post");
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!("2nd attempt at callback error: {}", e);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("1st attempt at callback error: {}", e);
+                    }
+                }
+            }
+        }
+    } else {
+        warn!("No Jobs to run");
+    }
+}
+
+pub async fn delete_stale_asyncquery_jobs() {
+    debug!("deleting stale asyncquery jobs");
+    // let mut connection = AsyncPgConnection::establish(&std::env::var("DATABASE_URL")?).await?;
+    if let Ok(jobs) = job_actions::find_all(None).await {
+        let now = Utc::now().naive_utc();
+        let futures: Vec<_> = jobs
+            .iter()
+            .filter(|j| {
+                let diff = now - j.date_submitted;
+                diff.num_seconds() > 7200
+            })
+            .map(|j| job_actions::delete(&j.id))
+            .collect();
+        let _ = join_all(futures);
+    }
 }
 
 pub fn build_http_client() -> reqwest::Client {
@@ -432,7 +587,7 @@ mod test {
     use ordered_float::OrderedFloat;
     use serde_json::{json, Result, Value};
     use std::cmp::Ordering;
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
     use std::fs;
     use std::ops::Deref;
     use std::path::Path;
@@ -533,11 +688,11 @@ mod test {
 
         let cqs_query = CQSQueryA::new();
         let mut new_results: Vec<trapi_model_rs::Result> = vec![];
-        let mut auxiliary_graphs: HashMap<String, AuxiliaryGraph> = HashMap::new();
+        let mut auxiliary_graphs: BTreeMap<String, AuxiliaryGraph> = BTreeMap::new();
 
         if let Some(results) = &mut response.message.results {
             for result in results {
-                let mut new_node_bindings: HashMap<String, Vec<NodeBinding>> = HashMap::new();
+                let mut new_node_bindings: BTreeMap<String, Vec<NodeBinding>> = BTreeMap::new();
 
                 // ($foo:ident, $bar:literal, $inferred_drug_node_id:literal, $inferred_predicate_id:literal, $inferred_disease_node_id:literal, $template_drug_node_id:literal, $template_disease_node_id:literal, $func:expr) => {
                 // crate::impl_wrapper!(CQSQueryA, "a", "n0", "e0", "n1", "n3", "n0", compute_composite_score);
@@ -665,7 +820,7 @@ mod test {
 
                                 if let Some(analysis) = v.iter().next() {
                                     let mut a = analysis.clone();
-                                    a.edge_bindings = edge_binding_map;
+                                    a.edge_bindings = edge_binding_map.into_iter().map(|(k, v)| (k, v.into_iter().collect())).collect();
                                     result.analyses.push(a);
                                 }
                             }
@@ -788,7 +943,7 @@ mod test {
             // Score = (W1 * OR1 + W2 * OR2 + W3 * OR3) / (W1 + W2 + W3)
 
             if let Some(query_graph) = &query.message.query_graph {
-                let cqs_query = CQSQueryD::new();
+                let cqs_query = CQSQueryA::new();
 
                 //this should be a one-hop query so assume only one entry
                 if let Some((qg_key, qg_edge)) = query_graph.edges.iter().next() {
@@ -854,7 +1009,7 @@ mod test {
                                                 }
 
                                                 let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
-                                                let mut analysis = Analysis::new("infores:cqs".into(), HashMap::from([(qg_key.clone(), kg_edge_keys)]));
+                                                let mut analysis = Analysis::new("infores:cqs".into(), BTreeMap::from([(qg_key.clone(), kg_edge_keys)]));
                                                 analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
                                                 if score.is_nan() {
                                                     analysis.score = Some(0.01_f64.atan() * 2.0 / std::f64::consts::PI);
@@ -875,7 +1030,7 @@ mod test {
                                                     println!("score: {:?}", score);
 
                                                     let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
-                                                    let mut analysis = Analysis::new("infores:cqs".into(), HashMap::from([(qg_key.clone(), kg_edge_keys)]));
+                                                    let mut analysis = Analysis::new("infores:cqs".into(), BTreeMap::from([(qg_key.clone(), kg_edge_keys)]));
                                                     analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
                                                     if score.is_nan() {
                                                         analysis.score = Some(0.01_f64.atan() * 2.0 / std::f64::consts::PI);

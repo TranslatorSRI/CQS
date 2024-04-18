@@ -43,12 +43,17 @@
             "biolink:DiseaseOrPhenotypicFeature"
           ],
           "ids": [
-            "{{ curies | join: '",
-            "' }}"
+            "{{ curies | join: '","' }}"
           ],
           "is_set": false
         }
       }
     }
-  }
+  },
+  "cqs_edge_source": [
+    {
+      "resource_id": "infores:cqs",
+      "resource_role": "primary_knowledge_source"
+    }
+  ]    
 }

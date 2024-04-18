@@ -1,5 +1,5 @@
 use crate::model::CQSCompositeScoreValue;
-use trapi_model_rs::Query;
+use crate::model::QueryTemplate;
 
 pub fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f64 {
     let total_sample_sizes: Vec<_> = entry_values.iter().filter_map(|ev| ev.total_sample_size).collect();
@@ -27,7 +27,7 @@ pub fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f6
 
 pub trait CQSQuery: Send + Sync {
     fn name(&self) -> String;
-    fn render_query_template(&self, ids: &Vec<trapi_model_rs::CURIE>) -> Query;
+    fn render_query_template(&self, ids: &Vec<trapi_model_rs::CURIE>) -> QueryTemplate;
     fn inferred_drug_node_id(&self) -> String;
     fn inferred_predicate_id(&self) -> String;
     fn inferred_disease_node_id(&self) -> String;
@@ -71,7 +71,7 @@ macro_rules! impl_wrapper {
                 $template_disease_node_id.to_string()
             }
 
-            fn render_query_template(&self, ids: &Vec<trapi_model_rs::CURIE>) -> Query {
+            fn render_query_template(&self, ids: &Vec<trapi_model_rs::CURIE>) -> QueryTemplate {
                 let file = format!("./src/data/{}.json", $bar.to_string());
                 let parser = liquid::ParserBuilder::with_stdlib().build().unwrap().parse_file(file).unwrap();
 
@@ -80,7 +80,7 @@ macro_rules! impl_wrapper {
                 });
 
                 let template = parser.render(&globals).unwrap();
-                let query: Query = serde_json::from_str(template.as_str()).unwrap();
+                let query: QueryTemplate = serde_json::from_str(template.as_str()).unwrap();
                 query
             }
 
