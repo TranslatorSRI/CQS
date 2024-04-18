@@ -10,7 +10,7 @@ default-run = "cqs-rs"
 async_once = "0.2.6"
 bb8 = "^0.8"
 bb8-diesel = "^0.2"
-chrono = { version = "^0.4", features = ["serde"]}
+chrono = { version = "^0.4", features = ["serde"] }
 clap = { version = "^4.3", features = ["derive"] }
 diesel = { version = "^2.1", features = ["postgres", "r2d2", "chrono", "serde_json"] }
 diesel-async = { version = "^0.4", features = ["bb8", "postgres"] }
@@ -23,7 +23,7 @@ itertools = "^0.12"
 lazy_static = "^1.4"
 liquid = "^0.26"
 log = { version = "^0.4", features = ["std"] }
-merge-hashmap = { version = "0.1.2", features = ["default", "merge_derive-hashmap"] }
+merge-hashmap = { version = "^0.1", features = ["default", "merge_derive-hashmap"] }
 ordered-float = "^4.2"
 reqwest = { version = "^0.12", features = ["default", "json"] }
 rocket = { version = "^0.5.0", features = ["json", "http2"] }
@@ -33,6 +33,6 @@ serde_derive = "^1.0"
 serde_json = "^1.0"
 serde_yaml = "^0.9"
 serde_with = { version = "^3.1", features = ["std", "macros", "json"] }
-tokio = { version = "1.28.2", features = ["full"]}
-trapi-model-rs = { git = "https://github.com/jdr0887/trapi-model-rs.git" }
-uuid = { version = "^1.4", features = ["v4"]}
+tokio = { version = "1.28.2", features = ["full"] }
+trapi-model-rs = { git = "https://github.com/jdr0887/trapi-model-rs.git", branch = "trapi-1.5" }
+uuid = { version = "^1.4", features = ["v4"] }
