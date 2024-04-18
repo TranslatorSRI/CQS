@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         };
 
         let object_node = match (v["output_id"].as_str(), v["output_category"].as_str()) {
-            (Some(id), Some(category)) => {
+            (Some(_id), Some(category)) => {
                 json!({"ids": [],"categories": [category]})
             }
             (Some(id), None) => {
@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         };
 
-        let output_id = v["output_id"].as_str().expect("could not get output id").trim();
+        let _output_id = v["output_id"].as_str().expect("could not get output id").trim();
         let predicate = v["predicate_id"].as_str().expect("could not get predicate id").trim();
         let qualifiers = v["qualifiers"].as_array().expect("could not get qualifiers");
         let real_qualfiers = qualifiers
@@ -135,7 +135,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let trapi_query = trapi_query_json.to_string();
         info!("{:?} - {}", test_asset_file.file_name(), trapi_query.to_string());
 
-        let query: AsyncQuery = serde_json::from_str(&trapi_query).expect("could not serialize json");
+        let _query: AsyncQuery = serde_json::from_str(&trapi_query).expect("could not serialize json");
 
         let response_result = client.post(cqs_url.clone()).json(&trapi_query_json).send().await;
         match response_result {
