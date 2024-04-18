@@ -9,7 +9,6 @@ ingress:
   enabled: true
   pathType: ImplementationSpecific
   timeout: 7200 # 1hr
-  major_minor_version: "1.4"
   tls:
     enabled: true
   annotations:
@@ -30,7 +29,7 @@ ingress:
 x_trapi:
   maturity: "development"
   location: "RENCI"
-  version: "1.4.0"
+  version: "1.5.0"
 app:
   port: 8000
   resources:
@@ -59,7 +58,7 @@ postgres:
     limits:
       memory: 10Gi
       cpu: 1000m
-  imagePullSecrets: []
+  imagePullSecrets: [ ]
   storage:
     size: 12Gi
   user: cqs
