@@ -30,7 +30,7 @@ GitHub format: mvp#-template#-infores or mvp#-template#-descriptive-name
 
 **_Note that MVP2 templates should be named as follows: MVP2-up-gene, MVP2-down-gene, MVP2-up-chemical, MVP2-down-chemical._**
 
-[Example JSON query](https://github.com/TranslatorSRI/CQS/tree/karafecho-patch-2/templates/example-cqs-mvp-template)
+[Example JSON query]([https://github.com/TranslatorSRI/CQS/tree/karafecho-patch-2/templates/example-cqs-mvp-template](https://github.com/TranslatorSRI/CQS/blob/main/templates/example-cqs-mvp-template/example-cqs-mvp-template.json)
 
 _**If you need edit access to the CQS repo, please contact Tursynay.**
 _
