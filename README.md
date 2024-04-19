@@ -35,7 +35,7 @@ The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in F
    
 4. Facilitates consistent specification and implementation of inference rules, by providing a centralized and transparent place to define, align, and collaborate on inference rules
 
-### How to Submit a New Template and into the Translator Pipeline
+### How to Submit a New Template and Enter it into the Translator Pipeline
 
 *See README in "templates" directory*
 
