@@ -1,0 +1,65 @@
+{
+  "workflow": [
+    {
+      "id": "lookup",
+      "runner_parameters": {
+        "allowlist": [
+          "infores:molepro"
+        ]
+      }
+    },
+    {
+      "id": "score"
+    }
+  ],
+  "message": {
+    "query_graph": {
+      "edges": {
+        "e00": {
+          "subject": "n00",
+          "object": "n01",
+          "predicates": [
+            "biolink:in_clinical_trials_for"
+          ],
+          "attribute_constraints": [
+            {
+              "id": "biolink:max_research_phase",
+              "name": "clinical-trials-edges",
+              "operator": "==",
+              "value": [
+                "clinical_trial_phase_1",
+                "clinical_trial_phase_2",
+                "clinical_trial_phase_3"
+              ]
+            }
+          ]
+        }
+      },
+      "nodes": {
+        "n00": {
+          "categories": [
+            "biolink:ChemicalEntity"
+          ]
+        },
+        "n01": {
+          "categories": [
+            "biolink:Disease"
+          ],
+          "ids": [
+            "MONDO:0000000"
+          ]
+        }
+      }
+    },
+  },    
+  "cqs_edge_source": [
+    {
+      "resource_id": "infores:molepro",
+      "resource_role": "primary_knowledge_source"
+    },
+    {
+      "resource_id": "infores:cqs",
+      "resource_role": "aggregator_knowledge_source"
+    }
+  ]
+}
