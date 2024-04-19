@@ -8,21 +8,21 @@ The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in F
 
 1. An SRI Service that provides ARA-like capabilities:
    
-- generation of ‘predicted’ edges in response to creative queries - based on customizable inference rules
+   - generation of ‘predicted’ edges in response to creative queries - based on customizable inference rules
 
-- linking predictions to their supporting aux graphs
+   - linking predictions to their supporting aux graphs
 
-- attachment of provenance metadata and scores to results
+   - attachment of provenance metadata and scores to results
 
 2. Inference specifications are defined as TRAPI templates, which serve as config files for a custom reasoning service / workflow
 
-- The specifications include a required field to specify primary and aggregator knowledge sources (e.g., "resource_id": "infores:biothings-explorer", "resource_role": "primary_knowledge_source") and optional fields to specify, for example, workflow parameters such as an "allow list"
+   - The specifications include a required field to specify primary and aggregator knowledge sources (e.g., "resource_id": "infores:biothings-explorer", "resource_role": "primary_knowledge_source") and optional fields to specify, for example, workflow parameters such as an "allow list"
 
 4. Scoring of individual workflow templates can be customized
 
-- e.g., ARAGORN’s scoring/ranking algorithm, OpenPredict’s prediction score 
+   - e.g., ARAGORN’s scoring/ranking algorithm, OpenPredict’s prediction score 
 
-- Scoring within a result is in descending order, based on the analysis score. Scoring across results is currently based on the max analysis score, in descending order
+   - Scoring within a result is in descending order, based on the analysis score. Scoring across results is currently based on the max analysis score, in descending order
 
 ### What it Enables
 
