@@ -51,8 +51,12 @@
   },
   "cqs_edge_source": [
     {
-      "resource_id": "infores:cqs",
+      "resource_id": "infores:service-provider-trapi",
       "resource_role": "primary_knowledge_source"
+    },
+    {
+      "resource_id": "infores:cqs",
+      "resource_role": "aggregator_knowledge_source"
     }
   ]
 }
