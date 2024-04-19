@@ -29,35 +29,15 @@ The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in F
 1. Supports manually-defined, SMuRF- and SME-evaluated inferred workflows to be contributed by any team or working group, or even external groups; each workflow is structured as a valid TRAPI query and serves as a CQS template
 
 2. Provides simple mechanism through which KPs can apply their expertise /resources to specify how their data are to be used for inference
-- This can enable a ”conservative ingest” paradigm - where KPs ingest what sources directly assert and rely on CQS services to generate desired inferences based on this more foundational knowledge
+   - This can enable a ”conservative ingest” paradigm - where KPs ingest what sources directly assert and rely on CQS services to generate desired inferences based on this more foundational knowledge
 
 2. Allows KP teams such as OpenPredict or Multiomics to avoid dealing with ARA functions such as aux graphs, ARS registration, merging, scoring, normalizing, adding literature co-occurrence
    
 4. Facilitates consistent specification and implementation of inference rules, by providing a centralized and transparent place to define, align, and collaborate on inference rules
 
-
 ### How to Submit a New Template and into the Translator Pipeline
 
-1. Generate a valid TRAPI template
-   - Include required specifications for primary and aggregator knowledge sources
-   - Add any additional specifications such as attribute constraints or workflow parameters such as an "allowlist"
-   - Follow the CQS convention for naming files as noted in the README for the "templates" directory
-
-2. Create a new folder within a subdirectory of the "templates" directory, following the CQS naming convention and organization scheme
-   - Add the valid TRAPI template from (1) and create a PR tagging Jason R., Max W., or Kara F. for review
-   - This will move your template into DEV
-  
-3. Test the template in DEV
-   - Notify Jason R., Max W., or Kara F. after you are satisfied with the test results
-   - This will move your template into CI
-  
-4. Review the Information Radiator tests from CI on a weekly basis
-   - These tests are run each weekend at 12 pm Sat/Sun
-   - Fix any bugs that are identified for your component
-   - Notify Jason R., Max W., or Kara F. after you are satisfied with the test results
-   - This will move your template into TEST
-
-5. Work with TAQA on UI testing in TEST
+*See README in "templates" directory*
 
 ## Architectural Overview
 
