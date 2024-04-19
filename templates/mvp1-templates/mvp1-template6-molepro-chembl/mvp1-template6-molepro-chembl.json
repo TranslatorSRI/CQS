@@ -24,7 +24,7 @@
           "attribute_constraints": [
             {
               "id": "biolink:max_research_phase",
-              "name": "clinical-trials-edges",
+              "name": "clinical-trials-phase",
               "operator": "==",
               "value": [
                 "clinical_trial_phase_1",
