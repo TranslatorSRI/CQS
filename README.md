@@ -4,7 +4,7 @@
 
 The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in Fall 2022. The goal is to create a skeletal ARA that initially will support the [TCDC's MVP1 workflow on rare pulmonary disease](https://docs.google.com/presentation/d/1pQp4SC9xxHojFdm1H4z_mdHSi6wpv7pq/edit?usp=sharing&ouid=112054006232285231595&rtpof=true&sd=true), e.g., MVP1 Template 1 (clinical-kps), but the goal is for the CQS to provide a general model and approach for other teams, committees, working groups, and external users who wish to contribute to the Translator ecosystem. The development and implementation work is being supported by the Translator Standards and Reference Implementation (SRI) core, with Jason Reilly serving as lead developer. Plans for long-term maintenance are TBD.
 
-**What It Does**
+### What It Does
 
 1. An SRI Service that provides ARA-like capabilities:
    
@@ -24,7 +24,7 @@ The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in F
 
 - Scoring within a result is in descending order, based on the analysis score. Scoring across results is currently based on the max analysis score, in descending order
 
-**What it Enables**
+### What it Enables
 
 1. Supports manually-defined, SMuRF- and SME-evaluated inferred workflows to be contributed by any team or working group, or even external groups; each workflow is structured as a valid TRAPI query and serves as a CQS template
 
