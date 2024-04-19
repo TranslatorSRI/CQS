@@ -14,9 +14,11 @@ The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in F
 
 - attachment of provenance metadata and scores to results
 
-2. Inference specifications are defined as TRAPI templates, which serve as config files for a custom reasoning service / workflow 
+2. Inference specifications are defined as TRAPI templates, which serve as config files for a custom reasoning service / workflow
 
-3. Scoring of individual workflow templates can be customized
+- The specifications include a required field to specify knowledge level / agent type (e.g., "resource_id": "infores:biothings-explorer", "resource_role": "primary_knowledge_source") and optional fields to specify, for example, workflow parameters such as an "allow list"
+
+4. Scoring of individual workflow templates can be customized
 
 - e.g., ARAGORN’s scoring/ranking algorithm, OpenPredict’s prediction score 
 
