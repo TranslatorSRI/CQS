@@ -4,7 +4,7 @@
 
 The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in Fall 2022. The goal is to create a skeletal ARA that initially will support the [TCDC's MVP1 workflow on rare pulmonary disease](https://docs.google.com/presentation/d/1pQp4SC9xxHojFdm1H4z_mdHSi6wpv7pq/edit?usp=sharing&ouid=112054006232285231595&rtpof=true&sd=true), e.g., MVP1 Template 1 (clinical-kps), but the goal is for the CQS to provide a general model and approach for other teams, committees, working groups, and external users who wish to contribute to the Translator ecosystem. The development and implementation work is being supported by the Translator Standards and Reference Implementation (SRI) core, with Jason Reilly serving as lead developer. Plans for long-term maintenance are TBD.
 
-**What It Does**
+### What It Does
 
 1. An SRI Service that provides ARA-like capabilities:
    
@@ -14,15 +14,17 @@ The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in F
 
 - attachment of provenance metadata and scores to results
 
-2. Inference specifications are defined as TRAPI templates, which serve as config files for a custom reasoning service / workflow 
+2. Inference specifications are defined as TRAPI templates, which serve as config files for a custom reasoning service / workflow
 
-3. Scoring of individual workflow templates can be customized
+- The specifications include a required field to specify knowledge level / agent type (e.g., "resource_id": "infores:biothings-explorer", "resource_role": "primary_knowledge_source") and optional fields to specify, for example, workflow parameters such as an "allow list"
+
+4. Scoring of individual workflow templates can be customized
 
 - e.g., ARAGORN’s scoring/ranking algorithm, OpenPredict’s prediction score 
 
 - Scoring within a result is in descending order, based on the analysis score. Scoring across results is currently based on the max analysis score, in descending order
 
-**What it Enables**
+### What it Enables
 
 1. Supports manually-defined, SMuRF- and SME-evaluated inferred workflows to be contributed by any team or working group, or even external groups; each workflow is structured as a valid TRAPI query and serves as a CQS template
 
