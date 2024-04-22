@@ -26,7 +26,7 @@
         },
         "n1": {
           "categories": ["biolink:DiseaseOrPhenotypicFeature"],
-          "ids": ["MONDO:0000000"],
+          "ids": [ ],
           "is_set": false
         }
       }
