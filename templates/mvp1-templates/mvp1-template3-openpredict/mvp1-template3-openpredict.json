@@ -30,9 +30,8 @@
           "categories": [
             "biolink:Disease"
           ],
-          "ids": [
-            "MONDO:0004979"
-          ]
+          "ids": [ ],
+          "is_set": false
         }
       }
     }
