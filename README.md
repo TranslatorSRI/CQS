@@ -2,7 +2,7 @@
 
 ## CQS Overview
 
-The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in Fall 2022. The goal is to create a skeletal ARA that initially will support the [TCDC's MVP1 workflow on rare pulmonary disease](https://docs.google.com/presentation/d/1pQp4SC9xxHojFdm1H4z_mdHSi6wpv7pq/edit?usp=sharing&ouid=112054006232285231595&rtpof=true&sd=true), e.g., MVP1 Template 1 (clinical-kps), but the goal is for the CQS to provide a general model and approach for other teams, committees, working groups, and external users who wish to contribute to the Translator ecosystem. The development and implementation work is being supported by the Translator Standards and Reference Implementation (SRI) core, with Jason Reilly serving as lead developer. Plans for long-term maintenance are TBD.
+The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in Fall 2022. The goal is to create a skeletal ARA that initially will support the [TCDC's MVP1 workflow on rare pulmonary disease](https://docs.google.com/presentation/d/1pQp4SC9xxHojFdm1H4z_mdHSi6wpv7pq/edit?usp=sharing&ouid=112054006232285231595&rtpof=true&sd=true), e.g., MVP1 Template 1 (clinical-kps), but the intent is for the CQS to provide a general model and approach for other teams, committees, working groups, and external users who wish to contribute to the Translator ecosystem. The development and implementation work is being supported by the Translator Standards and Reference Implementation (SRI) core, with Jason Reilly serving as lead developer. Plans for long-term maintenance are TBD.
 
 ### What It Does
 
@@ -34,6 +34,10 @@ The CQS was conceptualized by the Translator Clinical Data Committee (TCDC) in F
 2. Allows KP teams such as OpenPredict or Multiomics to avoid dealing with ARA functions such as aux graphs, ARS registration, merging, scoring, normalizing, adding literature co-occurrence
    
 4. Facilitates consistent specification and implementation of inference rules, by providing a centralized and transparent place to define, align, and collaborate on inference rules
+
+## How to Contribute a CQS Template and enter it into the Translator pipeline
+
+See README in "templates directory": https://github.com/TranslatorSRI/CQS/tree/main/templates.
 
 ## Architectural Overview
 
