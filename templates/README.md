@@ -10,14 +10,16 @@ The CQS was conceptualized by the Translator Clinical Data Committee, but initia
 
 1. Develop a set of "rules" specifying when a particular KP can contribute to an inferred MVP query.
 2. Apply the rules in (1) via a valid TRAPI query that can serve as a CQS template.
-3. Test the CQS template by direct query of the Workflow Runner.
-4. Create a branch in the CQS repo.
-- Add a new template folder within CQS/templates.
-- Within that folder, add a thoroughly descriptive README with a POC and select CURIES to be used for development and testing. The CURIES should be associated with test assets that the POC has contributed to the test assets repo, using [this G-sheet](https://docs.google.com/spreadsheets/d/1wAQaFEtFqAvp2fbTZIe-2ObF9zUU_cmXILfU8SzUWe0/edit?usp=drive_link).
-- Also add a new CQS template structured as a valid TRAPI.
-- Create a PR.
-6. The new CQS template will then be deployed to DEV, thus entering the Translator pipeline.
-7. After the CQS is deployed to CI, it will be picked up by the Information Radiator for automated testing. The POC for a given CQS template is responsible for monitoring the testing results.
+   - Include required specifications such as a field specifying primary and aggregator knowledge sources (see [example template](https://github.com/TranslatorSRI/CQS/blob/main/templates/example-cqs-mvp-template/example-cqs-mvp-template.json))
+   - Include any additional specifications such as attribute constraints and workflow parameters such as an "allowlist"
+4. Test the CQS template by direct query of the Workflow Runner.
+5. Create a branch in the CQS repo.
+   - Create a new template folder within CQS/templates. Following the nomenclature specified below.
+   - Within that folder, add a thoroughly descriptive README with a POC and select CURIES to be used for development and testing. The CURIES should be associated with test assets that the POC has contributed to the test assets repo, using [this G-sheet](https://docs.google.com/spreadsheets/d/1wAQaFEtFqAvp2fbTZIe-2ObF9zUU_cmXILfU8SzUWe0/edit?usp=drive_link).
+   - Add a new CQS template structured as a valid TRAPI.
+   - Create a PR.
+5. The new CQS template will then be deployed to DEV, thus entering the Translator pipeline.
+6. After the CQS is deployed to CI, it will be picked up by the Information Radiator for automated testing. The POC for a given CQS template is responsible for monitoring the testing results.
 
 *See https://github.com/NCATSTranslator/OperationsAndWorkflows/tree/main/schema for valid TRAPI operations and workflows.*
 
@@ -28,11 +30,11 @@ Example: MVP1 Template 3 (openpredict)
 
 GitHub format: mvp#-template#-infores or mvp#-template#-descriptive-name
 
-**_Note that MVP2 templates should be named as follows: MVP2-up-gene, MVP2-down-gene, MVP2-up-chemical, MVP2-down-chemical._**
+**Note that MVP2 templates should be named as follows: MVP2-up-gene, MVP2-down-gene, MVP2-up-chemical, MVP2-down-chemical.**
 
-[Example JSON query]([https://github.com/TranslatorSRI/CQS/tree/karafecho-patch-2/templates/example-cqs-mvp-template](https://github.com/TranslatorSRI/CQS/blob/main/templates/example-cqs-mvp-template/example-cqs-mvp-template.json)
+[Example JSON query](https://github.com/TranslatorSRI/CQS/blob/main/templates/example-cqs-mvp-template/example-cqs-mvp-template.json)
 
-_**If you need edit access to the CQS repo, please contact Tursynay.**
-_
+**If you need edit access to the CQS repo, please contact Tursynay.**
+
 
 
