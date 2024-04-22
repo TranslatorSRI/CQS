@@ -23,6 +23,7 @@
           "object": "n1",
           "attribute_constraints": [
             {
+              "name": "evidence_count_constraint"
               "id": "biolink:evidence_count",
               "operator": ">",
               "value": 20
@@ -51,8 +52,12 @@
   },
   "cqs_edge_source": [
     {
-      "resource_id": "infores:cqs",
+      "resource_id": "infores:service-provider-trapi",
       "resource_role": "primary_knowledge_source"
+    },
+    {
+      "resource_id": "infores:cqs",
+      "resource_role": "aggregator_knowledge_source"
     }
   ]
 }
