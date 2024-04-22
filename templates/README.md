@@ -4,7 +4,7 @@
 
 This folder is intended to suppport manually-defined, SMuRF- and SME-evaluated inferred CQS workflows, with each workflow structured as a valid TRAPI query and serving as a CQS template.
 
-The CQS was conceptualized by the Translator Clinical Data Committee, but initial development and implementation were conducted under the Standards and Reference Implementation (SRI) component of Translator. The CQS provides a simple mechanism through which KP teams or any committee, working group, or external team can apply their expertise /resources to specify how their data are to be used for inference. Thus, the CQS enables a ”conservative ingest” paradigm, where KP teams directly ingest knowledge sources and perhaps compute on them, but rely on the CQS service to generate desired inferences based on this more foundational knowledge.
+The CQS was conceptualized by the Translator Clinical Data Committee, but initial development and implementation were conducted under the Standards and Reference Implementation (SRI) component of Translator. The CQS provides a simple mechanism through which KP teams or any committee, working group, or external team can apply their expertise /resources to specify how their data are to be used for inference. Thus, the CQS enables a ”conservative ingest” paradigm, where KP teams directly ingest knowledge sources and perhaps compute on them, but rely on the CQS service to generate desired inferences based on this more foundational knowledge. The CQS templates are used by the CQS to create "treats" predictions.
 
 **The process to contribute a new CQS template is as follows:**
 
