@@ -10,8 +10,9 @@ The CQS was conceptualized by the Translator Clinical Data Committee, but initia
 
 1. Develop a set of "rules" specifying when a particular KP can contribute to an inferred MVP query.
 2. Apply the rules in (1) via a valid TRAPI query that can serve as a CQS template.
-   - Include required specifications such as a field specifying primary and aggregator knowledge sources (see [example template](https://github.com/TranslatorSRI/CQS/blob/main/templates/example-cqs-mvp-template/example-cqs-mvp-template.json))
-   - Include any additional specifications such as attribute constraints and workflow parameters such as an "allowlist"
+   - Include required specifications such as a field specifying primary and aggregator knowledge sources (see [example template](https://github.com/TranslatorSRI/CQS/blob/main/templates/example-cqs-mvp-template/example-cqs-mvp-template.json)).
+   - Include an "id" field for n0 in the form of an empty array.
+   - Include any additional specifications such as attribute constraints and workflow parameters such as an "allowlist".
 4. Test the CQS template by direct query of the Workflow Runner.
 5. Create a branch in the CQS repo.
    - Create a new template folder within CQS/templates. Following the nomenclature specified below.
