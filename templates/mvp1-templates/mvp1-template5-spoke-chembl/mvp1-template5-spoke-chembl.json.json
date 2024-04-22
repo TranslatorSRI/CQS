@@ -1,4 +1,18 @@
 {
+  "workflow": [
+    {
+      "id": "lookup",
+      "runner_parameters": {
+        "allowlist": [
+          "infores:spoke"
+        ]
+      }
+    },
+    {
+      "id": "score"
+    }
+  ],
+  
   "message": {
     "query_graph": {
       "edges": {
@@ -30,16 +44,14 @@
       "nodes": {
         "n00": {
           "categories": [
-            "biolink:SmallMolecule"
+            "biolink:ChemicalEntity"
           ]
         },
         "n01": {
           "categories": [
-            "biolink:Disease"
+            "biolink:DiseaseOrPhenotypicFeature"
           ],
-          "ids": [
-            "MONDO:0004981"
-          ]
+          "ids": [ ]
         }
       }
     },
@@ -54,10 +66,4 @@
     }
   ]
   },
-  "workflow": [
-    {
-      "id": "lookup",
-      "parameters": {}
-    }
-  ]
 }
