@@ -1,5 +1,6 @@
 use crate::model::CQSCompositeScoreValue;
 use crate::model::QueryTemplate;
+use trapi_model_rs::AttributeConstraint;
 
 pub fn compute_composite_score(entry_values: &Vec<CQSCompositeScoreValue>) -> f64 {
     let total_sample_sizes: Vec<_> = entry_values.iter().filter_map(|ev| ev.total_sample_size).collect();

@@ -9,7 +9,7 @@ use rocket_okapi::okapi::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::io::Write;
-use trapi_model_rs::{Query, RetrievalSource};
+use trapi_model_rs::{AttributeConstraint, Query, RetrievalSource};
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct QueryTemplate {
@@ -35,6 +35,26 @@ impl QueryTemplate {
             submitter: self.submitter.clone(),
             bypass_cache: self.bypass_cache.clone(),
         }
+    }
+
+    pub fn remove_edge_attribute_constraints(&mut self) {
+        if let Some(query_graph) = &mut self.message.query_graph {
+            query_graph.edges.iter_mut().for_each(|(ek, ev)| ev.attribute_constraints = None);
+        }
+    }
+
+    pub fn first_edge_attribute_constraint(&self) -> Option<AttributeConstraint> {
+        let mut attribute_constraint = None;
+        if let Some(query_graph) = &self.message.query_graph {
+            if let Some((k, v)) = query_graph.edges.first_key_value() {
+                if let Some(attribute_constraints) = &v.attribute_constraints {
+                    if let Some(first_ac) = attribute_constraints.first() {
+                        attribute_constraint = Some(first_ac.clone());
+                    }
+                }
+            }
+        }
+        attribute_constraint.clone()
     }
 }
 

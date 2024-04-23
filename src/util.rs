@@ -1,17 +1,17 @@
 use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue, JobStatus, QueryTemplate};
-use crate::{job_actions, scoring, util, WHITELISTED_CANNED_QUERIES};
+use crate::{job_actions, scoring, util, REQWEST_CLIENT, WHITELISTED_CANNED_QUERIES};
 use chrono::Utc;
 use futures::future::join_all;
 use itertools::Itertools;
 use merge_hashmap::Merge;
 use ordered_float::OrderedFloat;
-use reqwest::header;
-use reqwest::redirect::Policy;
+use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::env;
+use std::error;
 use std::time::Duration;
-use trapi_model_rs::{Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, KnowledgeType, Message, NodeBinding, ResourceRoleEnum, Response};
+use trapi_model_rs::{Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, Edge, EdgeBinding, KnowledgeType, Message, NodeBinding, ResourceRoleEnum, Response};
 
 #[allow(dead_code)]
 pub fn build_node_binding_to_log_odds_data_map(message: Message) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
@@ -365,7 +365,9 @@ pub fn group_results(message: &mut Message) {
     message.results = Some(new_results);
 }
 
-pub async fn process(reqwest_client: &reqwest::Client, cqs_query: &Box<dyn scoring::CQSQuery>, ids: &Vec<trapi_model_rs::CURIE>) -> Option<Response> {
+pub async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, ids: &Vec<trapi_model_rs::CURIE>) -> Option<Response> {
+    let request_client = REQWEST_CLIENT.get().await;
+
     let workflow_runner_url = format!(
         "{}/query",
         env::var("WORKFLOW_RUNNER_URL").unwrap_or("https://translator-workflow-runner.renci.org".to_string())
@@ -374,8 +376,11 @@ pub async fn process(reqwest_client: &reqwest::Client, cqs_query: &Box<dyn scori
     let backoff_multiplier = 2;
     let retries = 3;
 
-    let query_template: QueryTemplate = cqs_query.render_query_template(ids);
+    let mut query_template: QueryTemplate = cqs_query.render_query_template(ids);
 
+    let attribute_constraint = query_template.first_edge_attribute_constraint();
+
+    query_template.remove_edge_attribute_constraints();
     let query = query_template.to_query();
     debug!("cqs_query {} being sent to WFR: {}", cqs_query.name(), serde_json::to_string_pretty(&query).unwrap());
 
@@ -383,7 +388,7 @@ pub async fn process(reqwest_client: &reqwest::Client, cqs_query: &Box<dyn scori
     for attempt in 1..=retries {
         debug!("attempt: {} for cqs_query.name(): {}", attempt, cqs_query.name());
 
-        let wfr_response_result = reqwest_client.post(workflow_runner_url.clone()).json(&query).send().await;
+        let wfr_response_result = request_client.post(workflow_runner_url.clone()).json(&query).send().await;
         let wfr_response: Option<Response> = match wfr_response_result {
             Ok(response) => {
                 debug!("WFR response.status(): {} for query {} ", response.status(), cqs_query.name());
@@ -412,6 +417,10 @@ pub async fn process(reqwest_client: &reqwest::Client, cqs_query: &Box<dyn scori
     }
 
     if let Some(mut tr) = trapi_response {
+        // tr.message.knowledge_graph.unwrap().edges
+        if let (Some(ac), Some(kg)) = (attribute_constraint, &mut tr.message.knowledge_graph) {
+            apply_attribute_constraints(ac, &mut kg.edges);
+        }
         match env::var("WRITE_WFR_OUTPUT").unwrap_or("false".to_string()).as_str() {
             "true" => {
                 let parent_dir = std::path::Path::new("/tmp/cqs");
@@ -438,7 +447,6 @@ pub async fn process(reqwest_client: &reqwest::Client, cqs_query: &Box<dyn scori
 
 pub async fn process_asyncquery_jobs() {
     debug!("processing asyncquery jobs");
-    let reqwest_client = util::build_http_client();
 
     if let Ok(mut undone_jobs) = job_actions::find_undone().await {
         for job in undone_jobs.iter_mut() {
@@ -463,7 +471,7 @@ pub async fn process_asyncquery_jobs() {
                 }) {
                     if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
                         if let Some(ids) = &node_value.ids {
-                            let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES.iter().map(|cqs_query| util::process(&reqwest_client, cqs_query, &ids)).collect();
+                            let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES.iter().map(|cqs_query| util::process(cqs_query, &ids)).collect();
                             let joined_future_responses = join_all(future_responses).await;
                             joined_future_responses
                                 .into_iter()
@@ -492,53 +500,58 @@ pub async fn process_asyncquery_jobs() {
                 // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
                 // let message_with_score_attributes = util::add_composite_score_attributes(message, node_binding_to_log_odds_map);
                 // let mut ret = trapi_model_rs::Response::new(message_with_score_attributes);
-                let mut ret = trapi_model_rs::Response::new(message);
-                ret.status = Some("Success".to_string());
-                ret.workflow = query.workflow.clone();
-                ret.biolink_version = Some(env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string()));
-                ret.schema_version = Some(env::var("TRAPI_VERSION").unwrap_or("1.4.0".to_string()));
+                let mut res = Response::new(message);
+                res.status = Some("Success".to_string());
+                res.workflow = query.workflow.clone();
+                res.biolink_version = Some(env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string()));
+                res.schema_version = Some(env::var("TRAPI_VERSION").unwrap_or("1.4.0".to_string()));
 
-                job.response = Some(serde_json::to_string(&ret).unwrap().into_bytes());
+                job.response = Some(serde_json::to_string(&res).unwrap().into_bytes());
                 job.date_finished = Some(Utc::now().naive_utc());
                 job.status = JobStatus::Completed;
                 job_actions::update(job).await;
 
-                // 1st attempt
-                info!("1st attempt at sending response to: {}", &query.callback);
-                match reqwest_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
-                    Ok(first_attempt_callback_response) => {
-                        let first_attempt_status_code = first_attempt_callback_response.status();
-                        debug!("first_attempt_status_code: {}", first_attempt_status_code);
-                        if !first_attempt_status_code.is_success() {
-                            // update_job(job, JobStatus::Failed);
-                            warn!("failed to make 1st callback post");
-                            tokio::time::sleep(Duration::from_secs(10)).await;
-                            // 2st attempt
-                            info!("2nd attempt at sending response to: {}", &query.callback);
-                            match reqwest_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
-                                Ok(second_attempt_callback_response) => {
-                                    let second_attempt_status_code = second_attempt_callback_response.status();
-                                    debug!("second_attempt_status_code: {}", second_attempt_status_code);
-                                    if second_attempt_status_code.is_success() {
-                                        // update_job(job, JobStatus::Completed);
-                                    } else {
-                                        warn!("failed to make 2nd callback post");
-                                    }
-                                }
-                                Err(e) => {
-                                    warn!("2nd attempt at callback error: {}", e);
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        warn!("1st attempt at callback error: {}", e);
-                    }
-                }
+                send_callback(query, res).await;
             }
         }
     } else {
         warn!("No Jobs to run");
+    }
+}
+
+pub async fn send_callback(query: AsyncQuery, ret: Response) {
+    let request_client = REQWEST_CLIENT.get().await;
+    // 1st attempt
+    info!("1st attempt at sending response to: {}", &query.callback);
+    match request_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
+        Ok(first_attempt_callback_response) => {
+            let first_attempt_status_code = first_attempt_callback_response.status();
+            debug!("first_attempt_status_code: {}", first_attempt_status_code);
+            if !first_attempt_status_code.is_success() {
+                // update_job(job, JobStatus::Failed);
+                warn!("failed to make 1st callback post");
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                // 2st attempt
+                info!("2nd attempt at sending response to: {}", &query.callback);
+                match request_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
+                    Ok(second_attempt_callback_response) => {
+                        let second_attempt_status_code = second_attempt_callback_response.status();
+                        debug!("second_attempt_status_code: {}", second_attempt_status_code);
+                        if second_attempt_status_code.is_success() {
+                            // update_job(job, JobStatus::Completed);
+                        } else {
+                            warn!("failed to make 2nd callback post");
+                        }
+                    }
+                    Err(e) => {
+                        warn!("2nd attempt at callback error: {}", e);
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            warn!("1st attempt at callback error: {}", e);
+        }
     }
 }
 
@@ -559,20 +572,138 @@ pub async fn delete_stale_asyncquery_jobs() {
     }
 }
 
-pub fn build_http_client() -> reqwest::Client {
-    let mut headers = header::HeaderMap::new();
-    headers.insert(header::ACCEPT, header::HeaderValue::from_static("application/json"));
-    headers.insert(header::CONTENT_TYPE, header::HeaderValue::from_static("application/json"));
-    let reqwest_client = reqwest::Client::builder()
-        .redirect(Policy::limited(3))
-        .timeout(Duration::from_secs(900))
-        .default_headers(headers)
-        .build()
-        .expect("Could not build reqwest client");
-    reqwest_client
-    // let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-    // let client = ClientBuilder::new(reqwest_client).with(RetryTransientMiddleware::new_with_policy(retry_policy)).build();
-    // client
+pub fn apply_attribute_constraints(ac: trapi_model_rs::AttributeConstraint, edge_map: &mut HashMap<String, Edge>) {
+    let mut to_remove = vec![];
+    match ac.operator.as_str() {
+        ">" => {
+            edge_map.iter().for_each(|(k, v)| {
+                if let Some(edge_attributes) = &v.attributes {
+                    edge_attributes.iter().for_each(|e| {
+                        if e.attribute_type_id == ac.id {
+                            if e.value.as_i64().unwrap() <= ac.value.as_i64().unwrap() {
+                                to_remove.push(k.clone());
+                            }
+                        }
+                    });
+                }
+            });
+        }
+        "<" => {
+            edge_map.iter().for_each(|(k, v)| {
+                if let Some(edge_attributes) = &v.attributes {
+                    edge_attributes.iter().for_each(|e| {
+                        if e.attribute_type_id == ac.id {
+                            if e.value.as_i64().unwrap() >= ac.value.as_i64().unwrap() {
+                                to_remove.push(k.clone());
+                            }
+                        }
+                    });
+                }
+            });
+        }
+        "==" => {
+            edge_map.iter().for_each(|(k, v)| {
+                if let Some(edge_attributes) = &v.attributes {
+                    edge_attributes.iter().for_each(|e| {
+                        if e.attribute_type_id == ac.id {
+                            match &e.value {
+                                Value::Null => {}
+                                Value::Bool(ev) => {
+                                    if ev != &ac.value.as_bool().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                                Value::Number(ev) => {
+                                    if ev.as_i64().unwrap() != ac.value.as_i64().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                                Value::String(ev) => {
+                                    if ev != ac.value.as_str().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                                Value::Array(ev) => {
+                                    // assuming that 'ev' is a vector of strings since the AttributeConstraint.value will likely be a vector of strings
+                                    let ev_strings = ev.iter().map(|v| v.as_str().unwrap()).collect_vec();
+                                    let ac_array = ac.value.as_array().unwrap();
+                                    let ac_strings = ac_array.iter().map(|v| v.as_str().unwrap()).collect_vec();
+
+                                    if ev_strings.iter().all(|x| !ac_strings.contains(x)) {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                                Value::Object(ev) => {
+                                    // FIXME this feels too restrictive/inaccurate
+                                    if ev != ac.value.as_object().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        }
+        "===" => {
+            edge_map.iter().for_each(|(k, v)| {
+                if let Some(edge_attributes) = &v.attributes {
+                    edge_attributes.iter().for_each(|e| {
+                        if e.attribute_type_id == ac.id {
+                            match &e.value {
+                                Value::Null => {}
+                                Value::Bool(ev) => {
+                                    if ev != &ac.value.as_bool().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                                Value::Number(ev) => {
+                                    if ev.as_i64().unwrap() != ac.value.as_i64().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                                Value::String(ev) => {
+                                    if ev != ac.value.as_str().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                                Value::Array(ev) => {
+                                    if ev != ac.value.as_array().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                                Value::Object(ev) => {
+                                    if ev != ac.value.as_object().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        }
+        "matches" => {
+            edge_map.iter().for_each(|(k, v)| {
+                if let Some(edge_attributes) = &v.attributes {
+                    edge_attributes.iter().for_each(|e| {
+                        if e.attribute_type_id == ac.id {
+                            if let Ok(re) = regex::Regex::new(ac.value.as_str().unwrap()) {
+                                if !re.is_match(e.value.as_str().unwrap()) {
+                                    to_remove.push(k.clone());
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        }
+        &_ => {}
+    }
+
+    for k in to_remove.iter() {
+        edge_map.remove(k);
+    }
 }
 
 #[cfg(test)]
@@ -580,7 +711,7 @@ mod test {
     use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
     use crate::scoring::{CQSQuery, CQSQueryA, CQSQueryB};
     use crate::util;
-    use crate::util::{add_support_graphs, build_node_binding_to_log_odds_data_map};
+    use crate::util::{add_support_graphs, apply_attribute_constraints, build_node_binding_to_log_odds_data_map};
     use hyper::body::HttpBody;
     use itertools::Itertools;
     use merge_hashmap::Merge;
@@ -588,11 +719,192 @@ mod test {
     use serde_json::{json, Result, Value};
     use std::cmp::Ordering;
     use std::collections::{BTreeMap, HashMap};
+    use std::fmt::Debug;
     use std::fs;
     use std::ops::Deref;
     use std::path::Path;
-    use trapi_model_rs::{Analysis, Attribute, AuxiliaryGraph, BiolinkPredicate, EdgeBinding, NodeBinding, Query, ResourceRoleEnum, Response, RetrievalSource, CURIE};
+    use trapi_model_rs::{
+        Analysis, Attribute, AttributeConstraint, AuxiliaryGraph, BiolinkPredicate, Edge, EdgeBinding, NodeBinding, Query, ResourceRoleEnum, Response, RetrievalSource, CURIE,
+    };
     use uuid::uuid;
+
+    #[test]
+    fn attribute_constraint_array_equals() {
+        let mut edge_map: HashMap<String, Edge> = serde_json::from_value(json!({
+            "76fc96c78b9d": {
+              "subject": "PUBCHEM.COMPOUND:158781",
+              "predicate": "biolink:affects",
+              "object": "CHEMBL.TARGET:CHEMBL227",
+              "sources": [],
+              "attributes": [
+                {
+                  "attribute_type_id": "biolink:evidence_count",
+                  "original_attribute_name": "evidence_count",
+                  "value": [
+                    "qwer",
+                    "asdf",
+                    "zxcv"
+                ],
+                  "value_type_id": "EDAM:data_1772"
+                },
+              ]
+            }
+        }))
+        .unwrap();
+
+        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), vec!["qwer", "sdfg"].into());
+        apply_attribute_constraints(ac, &mut edge_map);
+        assert_eq!(1, edge_map.len());
+
+        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), vec!["wert"].into());
+        apply_attribute_constraints(ac, &mut edge_map);
+        assert_eq!(0, edge_map.len());
+    }
+
+    #[test]
+    fn attribute_constraint_string_equals() {
+        let mut edge_map: HashMap<String, Edge> = serde_json::from_value(json!({
+            "76fc96c78b9d": {
+              "subject": "PUBCHEM.COMPOUND:158781",
+              "predicate": "biolink:affects",
+              "object": "CHEMBL.TARGET:CHEMBL227",
+              "sources": [],
+              "attributes": [
+                {
+                  "attribute_type_id": "biolink:evidence_count",
+                  "original_attribute_name": "evidence_count",
+                  "value": "qwer",
+                  "value_type_id": "EDAM:data_1772"
+                },
+              ]
+            }
+        }))
+        .unwrap();
+
+        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), "qwer".into());
+        apply_attribute_constraints(ac, &mut edge_map);
+        assert_eq!(1, edge_map.len());
+
+        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), "zxcv".into());
+        apply_attribute_constraints(ac, &mut edge_map);
+        assert_eq!(0, edge_map.len());
+    }
+
+    #[test]
+    fn attribute_constraint_numeric_equals() {
+        let mut edge_map: HashMap<String, Edge> = serde_json::from_value(json!({
+            "76fc96c78b9d": {
+              "subject": "PUBCHEM.COMPOUND:158781",
+              "predicate": "biolink:affects",
+              "object": "CHEMBL.TARGET:CHEMBL227",
+              "sources": [],
+              "attributes": [
+                {
+                  "attribute_type_id": "biolink:evidence_count",
+                  "original_attribute_name": "evidence_count",
+                  "value": 100,
+                  "value_type_id": "EDAM:data_1772"
+                },
+              ]
+            }
+        }))
+        .unwrap();
+
+        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), 100.into());
+        apply_attribute_constraints(ac, &mut edge_map);
+        assert_eq!(1, edge_map.len());
+
+        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), 200.into());
+        apply_attribute_constraints(ac, &mut edge_map);
+        assert_eq!(0, edge_map.len());
+    }
+
+    #[test]
+    fn attribute_constraint_gt() {
+        let mut edge_map: HashMap<String, Edge> = serde_json::from_value(json!({
+            "76fc96c78b9d": {
+              "subject": "PUBCHEM.COMPOUND:158781",
+              "predicate": "biolink:affects",
+              "object": "CHEMBL.TARGET:CHEMBL227",
+              "sources": [],
+              "attributes": [
+                {
+                  "attribute_type_id": "biolink:evidence_count",
+                  "original_attribute_name": "evidence_count",
+                  "value": 100,
+                  "value_type_id": "EDAM:data_1772"
+                },
+              ]
+            }
+        }))
+        .unwrap();
+
+        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), ">".to_string(), 20.into());
+        apply_attribute_constraints(ac, &mut edge_map);
+        assert_eq!(1, edge_map.len());
+
+        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), ">".to_string(), 200.into());
+        apply_attribute_constraints(ac, &mut edge_map);
+        assert_eq!(0, edge_map.len());
+    }
+
+    #[test]
+    fn attribute_constraint_lt() {
+        let mut edge_map: HashMap<String, Edge> = serde_json::from_value(json!({
+            "76fc96c78b9d": {
+              "subject": "PUBCHEM.COMPOUND:158781",
+              "predicate": "biolink:affects",
+              "object": "CHEMBL.TARGET:CHEMBL227",
+              "sources": [],
+              "attributes": [
+                {
+                  "attribute_type_id": "biolink:evidence_count",
+                  "original_attribute_name": "evidence_count",
+                  "value": 100,
+                  "value_type_id": "EDAM:data_1772"
+                },
+              ]
+            }
+        }))
+        .unwrap();
+
+        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "<".to_string(), 200.into());
+        apply_attribute_constraints(ac, &mut edge_map);
+        assert_eq!(1, edge_map.len());
+
+        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "<".to_string(), 20.into());
+        apply_attribute_constraints(ac, &mut edge_map);
+        assert_eq!(0, edge_map.len());
+    }
+
+    #[test]
+    fn attribute_constraint_matches() {
+        let mut edge_map: HashMap<String, Edge> = serde_json::from_value(json!({
+            "76fc96c78b9d": {
+              "subject": "PUBCHEM.COMPOUND:158781",
+              "predicate": "biolink:affects",
+              "object": "CHEMBL.TARGET:CHEMBL227",
+              "sources": [],
+              "attributes": [
+                {
+                  "attribute_type_id": "biolink:asdf",
+                  "original_attribute_name": "asdf",
+                  "value": "123asdf456",
+                  "value_type_id": "EDAM:data_1772"
+                },
+              ]
+            }
+        }))
+        .unwrap();
+
+        let ac = AttributeConstraint::new("biolink:asdf".to_string(), "asdf".to_string(), "matches".to_string(), "^.+asdf.+$".into());
+        apply_attribute_constraints(ac, &mut edge_map);
+        assert_eq!(1, edge_map.len());
+
+        let ac = AttributeConstraint::new("biolink:asdf".to_string(), "asdf".to_string(), "matches".to_string(), "^.+zxcv.+$".into());
+        apply_attribute_constraints(ac, &mut edge_map);
+        assert_eq!(0, edge_map.len());
+    }
 
     #[test]
     #[ignore]

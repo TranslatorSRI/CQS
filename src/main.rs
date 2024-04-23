@@ -10,6 +10,7 @@ extern crate log;
 extern crate lazy_static;
 
 use crate::model::{JobStatus, NewJob};
+use crate::util::send_callback;
 use async_once::AsyncOnce;
 use diesel_async::pooled_connection::bb8::Pool;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
@@ -17,17 +18,20 @@ use diesel_async::AsyncPgConnection;
 use dotenvy::dotenv;
 use futures::future::join_all;
 use merge_hashmap::Merge;
+use reqwest::header;
+use reqwest::redirect::Policy;
 use rocket::fairing::AdHoc;
 use rocket::response::status;
 use rocket::serde::json::Json;
-use rocket::{Build, Rocket, State};
+use rocket::{Build, Rocket};
 use rocket_okapi::okapi::openapi3::*;
 use rocket_okapi::{mount_endpoints_and_merged_docs, openapi, openapi_get_routes_spec, swagger_ui::*};
 use serde_json::json;
+use std::collections::HashMap;
 use std::env;
 use std::time::Duration;
 use tokio::time::timeout;
-use trapi_model_rs::{AsyncQuery, AsyncQueryResponse, AsyncQueryStatusResponse, KnowledgeType, Query};
+use trapi_model_rs::{AsyncQuery, AsyncQueryResponse, AsyncQueryStatusResponse, KnowledgeGraph, KnowledgeType, Query};
 // use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
 mod job_actions;
@@ -48,6 +52,18 @@ lazy_static! {
         let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
         let pool = Pool::builder().connection_timeout(Duration::from_secs(120)).build(config).await;
         pool.unwrap()
+    });
+    pub static ref REQWEST_CLIENT: AsyncOnce<reqwest::Client> = AsyncOnce::new(async {
+        let mut headers = header::HeaderMap::new();
+        headers.insert(header::ACCEPT, header::HeaderValue::from_static("application/json"));
+        headers.insert(header::CONTENT_TYPE, header::HeaderValue::from_static("application/json"));
+        let reqwest_client = reqwest::Client::builder()
+            .redirect(Policy::limited(3))
+            .timeout(Duration::from_secs(900))
+            .default_headers(headers)
+            .build()
+            .expect("Could not build reqwest client");
+        reqwest_client
     });
 }
 
@@ -70,9 +86,21 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
             let mut ret = AsyncQueryResponse::new(job_id.to_string());
             ret.status = Some(JobStatus::Queued.to_string());
             return Ok(Json(ret));
+        } else {
+            let mut message = query.message.clone();
+            message.results = Some(vec![]);
+            message.knowledge_graph = Some(KnowledgeGraph::new(HashMap::new(), HashMap::new()));
+            let mut res = trapi_model_rs::Response::new(message);
+            res.status = Some("Success".to_string());
+            res.workflow = query.workflow.clone();
+            res.biolink_version = Some(env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string()));
+            res.schema_version = Some(env::var("TRAPI_VERSION").unwrap_or("1.4.0".to_string()));
+
+            send_callback(query, res).await;
+            return Err(status::Custom(rocket::http::Status::Ok, data.clone()));
         }
     }
-    Err(status::Custom(rocket::http::Status::Ok, data))
+    Err(status::Custom(rocket::http::Status::Ok, data.clone()))
 }
 
 #[openapi]
@@ -102,7 +130,7 @@ async fn asyncquery_status(job_id: i32) -> Result<Json<AsyncQueryStatusResponse>
 
 #[openapi]
 #[post("/query", data = "<data>")]
-async fn query(data: Json<Query>, reqwest_client: &State<reqwest::Client>) -> Json<trapi_model_rs::Response> {
+async fn query(data: Json<Query>) -> Json<trapi_model_rs::Response> {
     let query: Query = data.into_inner();
     let mut responses: Vec<trapi_model_rs::Response> = vec![];
 
@@ -117,7 +145,7 @@ async fn query(data: Json<Query>, reqwest_client: &State<reqwest::Client>) -> Js
         }) {
             if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
                 if let Some(ids) = &node_value.ids {
-                    let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES.iter().map(|cqs_query| util::process(&reqwest_client, cqs_query, &ids)).collect();
+                    let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES.iter().map(|cqs_query| util::process(cqs_query, &ids)).collect();
                     let joined_future_responses = join_all(future_responses).await;
                     joined_future_responses
                         .into_iter()
@@ -185,7 +213,6 @@ async fn main() {
 }
 
 pub fn create_server() -> Rocket<Build> {
-    let client = util::build_http_client();
     let mut building_rocket = rocket::build()
         .mount(
             "/docs/",
@@ -223,8 +250,7 @@ pub fn create_server() -> Rocket<Build> {
                     }
                 });
             })
-        }))
-        .manage(client);
+        }));
 
     let openapi_settings = rocket_okapi::settings::OpenApiSettings::default();
     let custom_route_spec = (vec![], openapi::custom_openapi_spec());
