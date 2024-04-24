@@ -7,7 +7,7 @@ keywords = ["ARA", "curated", "query", "service"]
 default-run = "cqs-rs"
 
 [dependencies]
-async_once = "0.2.6"
+async_once = "^0.2"
 bb8 = "^0.8"
 bb8-diesel = "^0.2"
 chrono = { version = "^0.4", features = ["serde"] }
@@ -21,7 +21,6 @@ futures = "^0.3"
 hyper = { version = "^0.14", features = ["client", "http1", "stream", "tcp"] }
 itertools = "^0.12"
 lazy_static = "^1.4"
-liquid = "^0.26"
 log = { version = "^0.4", features = ["std"] }
 merge-hashmap = { version = "^0.1", features = ["default", "merge_derive-hashmap"] }
 ordered-float = "^4.2"
@@ -32,7 +31,6 @@ rocket_okapi = { version = "0.8.0", features = ["swagger", "rapidoc"] }
 serde = { version = "^1.0", features = ["derive", "serde_derive"] }
 serde_derive = "^1.0"
 serde_json = "^1.0"
-serde_yaml = "^0.9"
 serde_with = { version = "^3.1", features = ["std", "macros", "json"] }
 tokio = { version = "1.28.2", features = ["full"] }
 trapi-model-rs = { git = "https://github.com/jdr0887/trapi-model-rs.git", branch = "trapi-1.5" }
