@@ -38,14 +38,14 @@ mod job_actions;
 mod model;
 mod openapi;
 mod schema;
-mod scoring;
+mod template;
 mod util;
 
 lazy_static! {
-    pub static ref WHITELISTED_CANNED_QUERIES: Vec<Box<dyn scoring::CQSQuery>> = vec![
-        Box::new(scoring::CQSQueryA::new()),
-        Box::new(scoring::CQSQueryB::new()),
-        Box::new(scoring::CQSQueryC::new()),
+    pub static ref WHITELISTED_TEMPLATE_QUERIES: Vec<Box<dyn template::CQSTemplate>> = vec![
+        Box::new(template::ClinicalKPs::new()),
+        Box::new(template::OpenPredict::new()),
+        Box::new(template::ServiceProviderAeolus::new()),
     ];
     pub static ref DB_POOL: AsyncOnce<bb8::Pool<AsyncDieselConnectionManager<AsyncPgConnection>>> = AsyncOnce::new(async {
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -145,7 +145,7 @@ async fn query(data: Json<Query>) -> Json<trapi_model_rs::Response> {
         }) {
             if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
                 if let Some(ids) = &node_value.ids {
-                    let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES.iter().map(|cqs_query| util::process(cqs_query, &ids)).collect();
+                    let future_responses: Vec<_> = WHITELISTED_TEMPLATE_QUERIES.iter().map(|cqs_query| util::process(cqs_query, &ids)).collect();
                     let joined_future_responses = join_all(future_responses).await;
                     joined_future_responses
                         .into_iter()
