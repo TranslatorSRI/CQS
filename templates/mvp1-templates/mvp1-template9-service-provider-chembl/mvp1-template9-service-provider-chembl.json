@@ -45,11 +45,11 @@
           "categories": [
             "biolink:DiseaseOrPhenotypicFeature"
           ],
-          "ids": [ ]
+          "ids": []
         }
       }
-    },
-  },    
+    }
+  },
   "cqs_edge_source": [
     {
       "resource_id": "infores:service-provider-trapi",

@@ -12,7 +12,6 @@
       "id": "score"
     }
   ],
-  
   "message": {
     "query_graph": {
       "edges": {
@@ -51,19 +50,19 @@
           "categories": [
             "biolink:DiseaseOrPhenotypicFeature"
           ],
-          "ids": [ ]
+          "ids": []
         }
       }
     },
-  "cqs_edge_source": [
-    {
-      "resource_id": "infores:spoke",
-      "resource_role": "primary_knowledge_source"
-    },
-    {
-      "resource_id": "infores:cqs",
-      "resource_role": "aggregator_knowledge_source"
-    }
-  ]
-  },
+    "cqs_edge_source": [
+      {
+        "resource_id": "infores:spoke",
+        "resource_role": "primary_knowledge_source"
+      },
+      {
+        "resource_id": "infores:cqs",
+        "resource_role": "aggregator_knowledge_source"
+      }
+    ]
+  }
 }

@@ -23,7 +23,7 @@
           "object": "n1",
           "attribute_constraints": [
             {
-              "name": "evidence_count_constraint"
+              "name": "evidence_count_constraint",
               "id": "biolink:evidence_count",
               "operator": ">",
               "value": 20
@@ -42,7 +42,7 @@
           "categories": [
             "biolink:DiseaseOrPhenotypicFeature"
           ],
-          "ids": [ ],
+          "ids": [],
           "is_set": false
         }
       }

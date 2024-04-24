@@ -64,9 +64,7 @@
       },
       "nodes": {
         "n0": {
-          "ids": [
-            "MONDO:0009061"
-          ],
+          "ids": [],
           "is_set": false
         },
         "n1": {
