@@ -49,7 +49,7 @@ macro_rules! impl_wrapper {
 
         impl CQSTemplate for $name {
             fn name(&self) -> String {
-                "$name".to_string()
+                stringify!($name).to_string()
             }
 
             fn inferred_drug_node_id(&self) -> String {
