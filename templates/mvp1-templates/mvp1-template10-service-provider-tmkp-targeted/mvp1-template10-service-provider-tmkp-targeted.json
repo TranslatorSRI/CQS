@@ -3,7 +3,9 @@
     {
       "id": "lookup",
       "runner_parameters": {
-        "allowlist": ["infores:service-provider-trapi"]
+        "allowlist": [
+          "infores:service-provider-trapi"
+        ]
       }
     },
     {
@@ -14,7 +16,9 @@
     "query_graph": {
       "edges": {
         "e0": {
-          "predicates": ["biolink:treats_or_applied_or_studied_to_treat"],
+          "predicates": [
+            "biolink:treats_or_applied_or_studied_to_treat"
+          ],
           "subject": "n0",
           "object": "n1",
           "attribute_constraints": [
@@ -26,15 +30,19 @@
             }
           ]
         }
-      },  
+      },
       "nodes": {
         "n0": {
-          "categories": ["biolink:ChemicalEntity"],
+          "categories": [
+            "biolink:ChemicalEntity"
+          ],
           "is_set": false
         },
         "n1": {
-          "categories": ["biolink:DiseaseOrPhenotypicFeature"],
-          "ids": [ ],
+          "categories": [
+            "biolink:DiseaseOrPhenotypicFeature"
+          ],
+          "ids": [],
           "is_set": false
         }
       }
