@@ -4,14 +4,15 @@
 
 This folder is intended to suppport manually-defined, SMuRF- and SME-evaluated inferred CQS workflows, with each workflow structured as a valid TRAPI query and serving as a CQS template.
 
-The CQS was conceptualized by the Translator Clinical Data Committee, but initial development and implementation were conducted under the Standards and Reference Implementation (SRI) component of Translator. The CQS provides a simple mechanism through which KP teams or any committee, working group, or external team can apply their expertise /resources to specify how their data are to be used for inference. Thus, the CQS enables a ”conservative ingest” paradigm, where KP teams directly ingest knowledge sources and perhaps compute on them, but rely on the CQS service to generate desired inferences based on this more foundational knowledge.
+The CQS was conceptualized by the Translator Clinical Data Committee, but initial development and implementation were conducted under the Standards and Reference Implementation (SRI) component of Translator. The CQS provides a simple mechanism through which KP teams or any committee, working group, or external team can apply their expertise /resources to specify how their data are to be used for inference. Thus, the CQS enables a ”conservative ingest” paradigm, where KP teams directly ingest knowledge sources and perhaps compute on them, but rely on the CQS service to generate desired inferences based on this more foundational knowledge. The CQS templates are used by the CQS to create "treats" predictions.
 
 **The process to contribute a new CQS template is as follows:**
 
 1. Develop a set of "rules" specifying when a particular KP can contribute to an inferred MVP query.
 2. Apply the rules in (1) via a valid TRAPI query that can serve as a CQS template.
-   - Include required specifications such as a field specifying primary and aggregator knowledge sources (see [example template](https://github.com/TranslatorSRI/CQS/blob/main/templates/example-cqs-mvp-template/example-cqs-mvp-template.json))
-   - Include any additional specifications such as attribute constraints and workflow parameters such as an "allowlist"
+   - Include required specifications such as a field specifying primary and aggregator knowledge sources (see [example template](https://github.com/TranslatorSRI/CQS/blob/main/templates/example-cqs-mvp-template/example-cqs-mvp-template.json)).
+   - Include an "id" field for n0 in the form of an empty array.
+   - Include any additional specifications such as attribute constraints and workflow parameters such as an "allowlist".
 4. Test the CQS template by direct query of the Workflow Runner.
 5. Create a branch in the CQS repo.
    - Create a new template folder within CQS/templates. Following the nomenclature specified below.
