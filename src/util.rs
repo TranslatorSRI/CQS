@@ -1,5 +1,5 @@
 use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue, JobStatus, QueryTemplate};
-use crate::{job_actions, scoring, util, REQWEST_CLIENT, WHITELISTED_CANNED_QUERIES};
+use crate::{job_actions, template, util, REQWEST_CLIENT, WHITELISTED_TEMPLATE_QUERIES};
 use chrono::Utc;
 use futures::future::join_all;
 use itertools::Itertools;
@@ -9,7 +9,6 @@ use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::env;
-use std::error;
 use std::time::Duration;
 use trapi_model_rs::{Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, Edge, EdgeBinding, KnowledgeType, Message, NodeBinding, ResourceRoleEnum, Response};
 
@@ -90,7 +89,7 @@ pub fn build_node_binding_to_log_odds_data_map(message: Message) -> HashMap<CQSC
 pub fn add_composite_score_attributes(
     mut response: Response,
     node_binding_to_log_odds_map: HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>>,
-    cqs_query: &Box<dyn scoring::CQSQuery>,
+    cqs_query: &Box<dyn template::CQSTemplate>,
 ) -> Response {
     if let Some(query_graph) = &response.message.query_graph {
         //this should be a one-hop query so assume only one entry
@@ -157,7 +156,7 @@ pub fn add_composite_score_attributes(
                                         edge_binding_map.insert(qg_key.clone(), kg_edge_keys);
                                         let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
                                         analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
-                                        analysis.score = Some(cqs_query.compute_score(entry_values));
+                                        analysis.score = Some(cqs_query.compute_score(entry_values.clone()));
                                         debug!("analysis: {:?}", analysis);
                                         r.analyses.push(analysis);
                                     }
@@ -169,7 +168,7 @@ pub fn add_composite_score_attributes(
                                             let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
                                             let mut analysis = Analysis::new("infores:cqs".into(), BTreeMap::from([(qg_key.clone(), kg_edge_keys)]));
                                             analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
-                                            analysis.score = Some(cqs_query.compute_score(entry_values));
+                                            analysis.score = Some(cqs_query.compute_score(entry_values.clone()));
                                             debug!("analysis: {:?}", analysis);
                                             r.analyses.push(analysis);
                                         }
@@ -242,7 +241,7 @@ pub fn sort_results_by_analysis_score(message: &mut Message) {
     }
 }
 
-pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn scoring::CQSQuery>, query_template: &QueryTemplate) {
+pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn template::CQSTemplate>, query_template: &QueryTemplate) {
     let mut auxiliary_graphs: BTreeMap<String, AuxiliaryGraph> = BTreeMap::new();
 
     if let Some(results) = &mut response.message.results {
@@ -365,7 +364,7 @@ pub fn group_results(message: &mut Message) {
     message.results = Some(new_results);
 }
 
-pub async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, ids: &Vec<trapi_model_rs::CURIE>) -> Option<Response> {
+pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi_model_rs::CURIE>) -> Option<Response> {
     let request_client = REQWEST_CLIENT.get().await;
 
     let workflow_runner_url = format!(
@@ -376,7 +375,7 @@ pub async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, ids: &Vec<trapi_mod
     let backoff_multiplier = 2;
     let retries = 3;
 
-    let mut query_template: QueryTemplate = cqs_query.render_query_template(ids);
+    let mut query_template: QueryTemplate = cqs_query.render_query_template(ids.clone());
 
     let attribute_constraint = query_template.first_edge_attribute_constraint();
 
@@ -417,7 +416,6 @@ pub async fn process(cqs_query: &Box<dyn scoring::CQSQuery>, ids: &Vec<trapi_mod
     }
 
     if let Some(mut tr) = trapi_response {
-        // tr.message.knowledge_graph.unwrap().edges
         if let (Some(ac), Some(kg)) = (attribute_constraint, &mut tr.message.knowledge_graph) {
             apply_attribute_constraints(ac, &mut kg.edges);
         }
@@ -471,7 +469,7 @@ pub async fn process_asyncquery_jobs() {
                 }) {
                     if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
                         if let Some(ids) = &node_value.ids {
-                            let future_responses: Vec<_> = WHITELISTED_CANNED_QUERIES.iter().map(|cqs_query| util::process(cqs_query, &ids)).collect();
+                            let future_responses: Vec<_> = WHITELISTED_TEMPLATE_QUERIES.iter().map(|cqs_query| util::process(cqs_query, &ids)).collect();
                             let joined_future_responses = join_all(future_responses).await;
                             joined_future_responses
                                 .into_iter()
@@ -709,10 +707,9 @@ pub fn apply_attribute_constraints(ac: trapi_model_rs::AttributeConstraint, edge
 #[cfg(test)]
 mod test {
     use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
-    use crate::scoring::{CQSQuery, CQSQueryA, CQSQueryB};
-    use crate::util;
+    use crate::template;
+    use crate::template::CQSTemplate;
     use crate::util::{add_support_graphs, apply_attribute_constraints, build_node_binding_to_log_odds_data_map};
-    use hyper::body::HttpBody;
     use itertools::Itertools;
     use merge_hashmap::Merge;
     use ordered_float::OrderedFloat;
@@ -953,52 +950,13 @@ mod test {
     }
 
     #[test]
-    fn test_scratch_liquid() {
-        let ids: Vec<String> = vec![
-            "MONDO:0004979".to_string(),
-            "MONDO:0016575".to_string(),
-            "MONDO:0009061".to_string(),
-            "MONDO:0018956".to_string(),
-            "MONDO:0011705".to_string(),
-            "MONDO:0008345".to_string(),
-            "MONDO:0020066".to_string(),
-        ];
-
-        let curie_token = serde_json::to_string(&ids).unwrap();
-        // let curie_token = serde_json::to_value(&ids).unwrap();
-        // let asdf = liquid::model::value!(ids);
-
-        let template = liquid::ParserBuilder::with_stdlib()
-            .build()
-            .unwrap()
-            .parse_file("data/mvp1-template1-clinical-kps.json")
-            .unwrap();
-        // let template = liquid::ParserBuilder::with_stdlib().build().unwrap().parse_file("/tmp/mvp1-template1-clinical-kps.json").unwrap();
-
-        let mut globals = liquid::object!({
-            "curies": ids
-        });
-
-        let output = template.render(&globals).unwrap();
-        println!("{}", output);
-
-        let query_json_value: serde_json::Value = serde_json::from_str(&output).expect("Could not cast rendered json");
-        println!("{}", serde_json::to_string_pretty(&query_json_value).unwrap());
-
-        let query_model: trapi_model_rs::Query = serde_json::from_str(&output).expect("Could not cast rendered json");
-        println!("{}", serde_json::to_string_pretty(&query_model).unwrap());
-
-        // assert_eq!(output, "Liquid! 2".to_string());
-    }
-
-    #[test]
     fn test_add_aux_graphs() {
         let data = fs::read_to_string(Path::new("/tmp/cqs/a3522bf3-6c73-4ed4-98f4-aada6746ed1d.json")).unwrap();
         // let data = fs::read_to_string(Path::new("/tmp/cqs/fa62acca-ce27-4b7d-8d84-22ab4906bdcc.json")).unwrap();
 
         let mut response: Response = serde_json::from_str(data.as_str()).unwrap();
 
-        let cqs_query = CQSQueryA::new();
+        let cqs_query = template::ClinicalKPs::new();
         let mut new_results: Vec<trapi_model_rs::Result> = vec![];
         let mut auxiliary_graphs: BTreeMap<String, AuxiliaryGraph> = BTreeMap::new();
 
@@ -1173,8 +1131,8 @@ mod test {
             },
         ];
 
-        let cqs_query = CQSQueryA::new();
-        let score = cqs_query.compute_score(&values);
+        let cqs_query = template::ClinicalKPs::new();
+        let score = cqs_query.compute_score(values);
         let normalized_score = score.atan() * 2.0 / std::f64::consts::PI;
         println!("score: {:?}, normalized_score: {:?}", score, normalized_score);
         assert!(true);
@@ -1255,7 +1213,7 @@ mod test {
             // Score = (W1 * OR1 + W2 * OR2 + W3 * OR3) / (W1 + W2 + W3)
 
             if let Some(query_graph) = &query.message.query_graph {
-                let cqs_query = CQSQueryA::new();
+                let cqs_query = template::ClinicalKPs::new();
 
                 //this should be a one-hop query so assume only one entry
                 if let Some((qg_key, qg_edge)) = query_graph.edges.iter().next() {
@@ -1313,7 +1271,7 @@ mod test {
                                         match entry {
                                             Some((entry_key, entry_values)) => {
                                                 println!("entry_key: {:?}, entry_values: {:?}", entry_key, entry_values);
-                                                let score = cqs_query.compute_score(entry_values);
+                                                let score = cqs_query.compute_score(entry_values.clone());
                                                 println!("score: {:?}", score);
                                                 // subject: "MONDO:0009061", object: "PUBCHEM.COMPOUND:16220172"
                                                 if first_subject_nb.id == "MONDO:0009061" && first_object_nb.id == "PUBCHEM.COMPOUND:16220172" {
@@ -1338,7 +1296,7 @@ mod test {
 
                                                 if let Some((entry_key, entry_values)) = entry {
                                                     println!("entry_key: {:?}, entry_values: {:?}", entry_key, entry_values);
-                                                    let score = cqs_query.compute_score(entry_values);
+                                                    let score = cqs_query.compute_score(entry_values.clone());
                                                     println!("score: {:?}", score);
 
                                                     let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
