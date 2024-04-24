@@ -39,14 +39,14 @@ impl QueryTemplate {
 
     pub fn remove_edge_attribute_constraints(&mut self) {
         if let Some(query_graph) = &mut self.message.query_graph {
-            query_graph.edges.iter_mut().for_each(|(ek, ev)| ev.attribute_constraints = None);
+            query_graph.edges.iter_mut().for_each(|(_ek, ev)| ev.attribute_constraints = None);
         }
     }
 
     pub fn first_edge_attribute_constraint(&self) -> Option<AttributeConstraint> {
         let mut attribute_constraint = None;
         if let Some(query_graph) = &self.message.query_graph {
-            if let Some((k, v)) = query_graph.edges.first_key_value() {
+            if let Some((_k, v)) = query_graph.edges.first_key_value() {
                 if let Some(attribute_constraints) = &v.attribute_constraints {
                     if let Some(first_ac) = attribute_constraints.first() {
                         attribute_constraint = Some(first_ac.clone());
