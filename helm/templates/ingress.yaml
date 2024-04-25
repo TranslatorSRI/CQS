@@ -11,13 +11,13 @@ spec:
       secretName: {{ .Values.ingress.host }}-tls
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.host }}
-      http:
-        paths:
-          - path: "/(.*)"
-            pathType: {{ .Values.ingress.pathType }}
-            backend:
-              service:
-                name: {{ include "cqs.fullname" . }}-app-service
-                port:
-                  number: {{ .Values.app.port }}
+      - host: {{ .Values.ingress.host }}
+        http:
+          paths:
+            - path: "/"
+              pathType: {{ .Values.ingress.pathType }}
+              backend:
+                service:
+                  name: {{ include "cqs.fullname" . }}-app-service
+                  port:
+                    number: {{ .Values.app.port }}
