@@ -93,30 +93,100 @@ macro_rules! impl_wrapper {
 impl_wrapper!(
     ClinicalKPs,
     "mvp1-template1-clinical-kps/mvp1-template1-clinical-kps.json",
-    "n0",
-    "e0",
-    "n1",
-    "n3",
-    "n0",
+    "n0", //inferred_drug_node_id
+    "e0", //inferred_predicate_id
+    "n1", //inferred_disease_node_id
+    "n3", //template_drug_node_id
+    "n0", //template_disease_node_id
     compute_composite_score
 );
+// impl_wrapper!(
+//     ConnectionHypothesis,
+//     "mvp1-template2-connections-hypothesis/mvp1-template2-connection-hypothesis.json",
+//     "n0", //inferred_drug_node_id
+//     "e0", //inferred_predicate_id
+//     "n1", //inferred_disease_node_id
+//     "n0", //template_drug_node_id
+//     "n1", //template_disease_node_id
+//     compute_composite_score
+// );
 impl_wrapper!(
     OpenPredict,
     "mvp1-template3-openpredict/mvp1-template3-openpredict.json",
-    "n0",
-    "e0",
-    "n1",
-    "n0",
-    "n1",
+    "n0", //inferred_drug_node_id
+    "e0", //inferred_predicate_id
+    "n1", //inferred_disease_node_id
+    "n0", //template_drug_node_id
+    "n1", //template_disease_node_id
     compute_composite_score
 );
 impl_wrapper!(
     ServiceProviderAeolus,
     "mvp1-template4-service-provider-aeolus/mvp1-template4-service-provider-aeolus.json",
-    "n0",
-    "e0",
-    "n1",
-    "n0",
-    "n1",
+    "n0", //inferred_drug_node_id
+    "e0", //inferred_predicate_id
+    "n1", //inferred_disease_node_id
+    "n0", //template_drug_node_id
+    "n1", //template_disease_node_id
+    compute_composite_score
+);
+impl_wrapper!(
+    SpokeChembl,
+    "mvp1-template5-spoke-chembl/mvp1-template5-spoke-chembl.json",
+    "n0",  //inferred_drug_node_id
+    "e0",  //inferred_predicate_id
+    "n1",  //inferred_disease_node_id
+    "n00", //template_drug_node_id
+    "n01", //template_disease_node_id
+    compute_composite_score
+);
+impl_wrapper!(
+    MoleProChembl,
+    "mvp1-template6-molepro-chembl/mvp1-template6-molepro-chembl.json",
+    "n0",  //inferred_drug_node_id
+    "e0",  //inferred_predicate_id
+    "n1",  //inferred_disease_node_id
+    "n00", //template_drug_node_id
+    "n01", //template_disease_node_id
+    compute_composite_score
+);
+impl_wrapper!(
+    RTXKG2SemMed,
+    "mvp1-template7-rtxkg2-semmed/mvp1-template7-rtxkg2-semmed.json",
+    "n0", //inferred_drug_node_id
+    "e0", //inferred_predicate_id
+    "n1", //inferred_disease_node_id
+    "n0", //template_drug_node_id
+    "n1", //template_disease_node_id
+    compute_composite_score
+);
+impl_wrapper!(
+    ServiceProviderSemMed,
+    "mvp1-template8-service-provider-semmed/mvp1-template8-service-provider-semmed.json",
+    "n0", //inferred_drug_node_id
+    "e0", //inferred_predicate_id
+    "n1", //inferred_disease_node_id
+    "n0", //template_drug_node_id
+    "n1", //template_disease_node_id
+    compute_composite_score
+);
+impl_wrapper!(
+    ServiceProviderChembl,
+    "mvp1-template9-service-provider-chembl/mvp1-template9-service-provider-chembl.json",
+    "n0",  //inferred_drug_node_id
+    "e0",  //inferred_predicate_id
+    "n1",  //inferred_disease_node_id
+    "n00", //template_drug_node_id
+    "n01", //template_disease_node_id
+    compute_composite_score
+);
+impl_wrapper!(
+    ServiceProviderTMKPTargeted,
+    "mvp1-template10-service-provider-tmkp-targeted/mvp1-template10-service-provider-tmkp-targeted.json",
+    "n0", //inferred_drug_node_id
+    "e0", //inferred_predicate_id
+    "n1", //inferred_disease_node_id
+    "n0", //template_drug_node_id
+    "n1", //template_disease_node_id
     compute_composite_score
 );
