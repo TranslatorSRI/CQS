@@ -1,7 +1,7 @@
 replicaCount: 1
 image:
   repository: "ghcr.io/translatorsri/cqs"
-  tag: "0.2.19"
+  tag: "0.3.0"
   pullPolicy: Always
 ingress:
   host: ""
@@ -58,7 +58,7 @@ postgres:
     limits:
       memory: 10Gi
       cpu: 1000m
-  imagePullSecrets: [ ]
+  imagePullSecrets: []
   storage:
     size: 12Gi
   user: cqs
