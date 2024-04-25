@@ -416,9 +416,6 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
     }
 
     if let Some(mut tr) = trapi_response {
-        if let (Some(ac), Some(kg)) = (attribute_constraint, &mut tr.message.knowledge_graph) {
-            apply_attribute_constraints(ac, &mut kg.edges);
-        }
         match env::var("WRITE_WFR_OUTPUT").unwrap_or("false".to_string()).as_str() {
             "true" => {
                 let parent_dir = std::path::Path::new("/tmp/cqs");
@@ -432,6 +429,9 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
             }
             _ => {}
         };
+        if let (Some(ac), Some(kg)) = (attribute_constraint, &mut tr.message.knowledge_graph) {
+            apply_attribute_constraints(ac, &mut kg.edges);
+        }
         add_support_graphs(&mut tr, cqs_query, &query_template);
         Some(tr)
     } else {
