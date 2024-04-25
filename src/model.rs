@@ -54,7 +54,7 @@ impl QueryTemplate {
                 }
             }
         }
-        attribute_constraint.clone()
+        attribute_constraint
     }
 }
 
