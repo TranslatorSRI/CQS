@@ -381,7 +381,7 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
 
     query_template.remove_edge_attribute_constraints();
     let query = query_template.to_query();
-    debug!("cqs_query {} being sent to WFR: {}", cqs_query.name(), serde_json::to_string_pretty(&query).unwrap());
+    info!("cqs_query {} being sent to WFR: {}", cqs_query.name(), serde_json::to_string(&query).unwrap());
 
     let mut trapi_response = None;
     for attempt in 1..=retries {
@@ -390,7 +390,7 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
         let wfr_response_result = request_client.post(workflow_runner_url.clone()).json(&query).send().await;
         let wfr_response: Option<Response> = match wfr_response_result {
             Ok(response) => {
-                debug!("WFR response.status(): {} for query {} ", response.status(), cqs_query.name());
+                info!("WFR response.status(): {} for query {} ", response.status(), cqs_query.name());
                 let result_data = response.text().await;
                 match result_data {
                     Ok(data) => Some(serde_json::from_str(data.as_str()).expect("could not parse Query")),
@@ -421,7 +421,7 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
                 let parent_dir = std::path::Path::new("/tmp/cqs");
                 if parent_dir.exists() {
                     std::fs::write(
-                        std::path::Path::join(parent_dir, format!("template-{}-{}.json", cqs_query.name(), uuid::Uuid::new_v4().to_string()).as_str()),
+                        std::path::Path::join(parent_dir, format!("pre-{}-{}.json", cqs_query.name(), uuid::Uuid::new_v4().to_string()).as_str()),
                         serde_json::to_string_pretty(&tr).unwrap(),
                     )
                     .expect("failed to write output");
@@ -430,9 +430,44 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
             _ => {}
         };
         if let (Some(ac), Some(kg)) = (attribute_constraint, &mut tr.message.knowledge_graph) {
-            apply_attribute_constraints(ac, &mut kg.edges);
+            let edge_keys_to_remove = find_edge_keys_to_remove(ac.clone(), &kg.edges);
+            debug!("{}, {:?}, removing edges: {:?}", cqs_query.name(), ac, edge_keys_to_remove);
+            for ek in edge_keys_to_remove.iter() {
+                kg.edges.remove(ek);
+            }
+
+            if let Some(results) = &mut tr.message.results {
+                let mut results_to_remove = vec![];
+                for result in results.iter() {
+                    result
+                        .analyses
+                        .iter()
+                        .filter(|a| {
+                            a.edge_bindings
+                                .iter()
+                                .any(|(_eb_key, eb_value)| eb_value.iter().any(|eb| edge_keys_to_remove.contains(&eb.id)))
+                        })
+                        .for_each(|_a| results_to_remove.push(result.clone()));
+                }
+                results.retain(|r| !results_to_remove.contains(r));
+            }
         }
         add_support_graphs(&mut tr, cqs_query, &query_template);
+
+        match env::var("WRITE_WFR_OUTPUT").unwrap_or("false".to_string()).as_str() {
+            "true" => {
+                let parent_dir = std::path::Path::new("/tmp/cqs");
+                if parent_dir.exists() {
+                    std::fs::write(
+                        std::path::Path::join(parent_dir, format!("post-{}-{}.json", cqs_query.name(), uuid::Uuid::new_v4().to_string()).as_str()),
+                        serde_json::to_string_pretty(&tr).unwrap(),
+                    )
+                    .expect("failed to write output");
+                }
+            }
+            _ => {}
+        };
+
         Some(tr)
     } else {
         None
@@ -444,7 +479,7 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
 }
 
 pub async fn process_asyncquery_jobs() {
-    debug!("processing asyncquery jobs");
+    info!("processing asyncquery jobs");
 
     if let Ok(mut undone_jobs) = job_actions::find_undone().await {
         for job in undone_jobs.iter_mut() {
@@ -554,7 +589,7 @@ pub async fn send_callback(query: AsyncQuery, ret: Response) {
 }
 
 pub async fn delete_stale_asyncquery_jobs() {
-    debug!("deleting stale asyncquery jobs");
+    info!("deleting stale asyncquery jobs");
     // let mut connection = AsyncPgConnection::establish(&std::env::var("DATABASE_URL")?).await?;
     if let Ok(jobs) = job_actions::find_all(None).await {
         let now = Utc::now().naive_utc();
@@ -570,7 +605,7 @@ pub async fn delete_stale_asyncquery_jobs() {
     }
 }
 
-pub fn apply_attribute_constraints(ac: trapi_model_rs::AttributeConstraint, edge_map: &mut HashMap<String, Edge>) {
+pub fn find_edge_keys_to_remove(ac: trapi_model_rs::AttributeConstraint, edge_map: &HashMap<String, Edge>) -> Vec<String> {
     let mut to_remove = vec![];
     match ac.operator.as_str() {
         ">" => {
@@ -578,8 +613,29 @@ pub fn apply_attribute_constraints(ac: trapi_model_rs::AttributeConstraint, edge
                 if let Some(edge_attributes) = &v.attributes {
                     edge_attributes.iter().for_each(|e| {
                         if e.attribute_type_id == ac.id {
-                            if e.value.as_i64().unwrap() <= ac.value.as_i64().unwrap() {
-                                to_remove.push(k.clone());
+                            match &e.value {
+                                Value::Null => {}
+                                Value::Bool(_) => {}
+                                Value::Number(ev) => {
+                                    if ev.as_i64().unwrap() <= ac.value.as_i64().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                                Value::String(ev) => {
+                                    if ev.parse::<i64>().unwrap() <= ac.value.as_i64().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                                Value::Array(ev) => {
+                                    if !ev.is_empty() {
+                                        if let Some(first) = ev.first() {
+                                            if first.as_i64().unwrap() <= ac.value.as_i64().unwrap() {
+                                                to_remove.push(k.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                                Value::Object(_) => {}
                             }
                         }
                     });
@@ -591,8 +647,29 @@ pub fn apply_attribute_constraints(ac: trapi_model_rs::AttributeConstraint, edge
                 if let Some(edge_attributes) = &v.attributes {
                     edge_attributes.iter().for_each(|e| {
                         if e.attribute_type_id == ac.id {
-                            if e.value.as_i64().unwrap() >= ac.value.as_i64().unwrap() {
-                                to_remove.push(k.clone());
+                            match &e.value {
+                                Value::Null => {}
+                                Value::Bool(_) => {}
+                                Value::Number(ev) => {
+                                    if ev.as_i64().unwrap() >= ac.value.as_i64().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                                Value::String(ev) => {
+                                    if ev.parse::<i64>().unwrap() >= ac.value.as_i64().unwrap() {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                                Value::Array(ev) => {
+                                    if !ev.is_empty() {
+                                        if let Some(first) = ev.first() {
+                                            if first.as_i64().unwrap() >= ac.value.as_i64().unwrap() {
+                                                to_remove.push(k.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                                Value::Object(_) => {}
                             }
                         }
                     });
@@ -627,7 +704,8 @@ pub fn apply_attribute_constraints(ac: trapi_model_rs::AttributeConstraint, edge
                                     let ac_array = ac.value.as_array().unwrap();
                                     let ac_strings = ac_array.iter().map(|v| v.as_str().unwrap()).collect_vec();
 
-                                    if ev_strings.iter().all(|x| !ac_strings.contains(x)) {
+                                    if !ev_strings.iter().any(|x| ac_strings.contains(x)) {
+                                        // info!("!ev_strings.iter().any(|x| ac_strings.contains(x)) is true: {}", k.clone());
                                         to_remove.push(k.clone());
                                     }
                                 }
@@ -699,9 +777,11 @@ pub fn apply_attribute_constraints(ac: trapi_model_rs::AttributeConstraint, edge
         &_ => {}
     }
 
-    for k in to_remove.iter() {
-        edge_map.remove(k);
-    }
+    // info!("removing: {:?}", to_remove);
+    // for k in to_remove.iter() {
+    //     edge_map.remove(k);
+    // }
+    to_remove
 }
 
 #[cfg(test)]
@@ -709,7 +789,7 @@ mod test {
     use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue};
     use crate::template;
     use crate::template::CQSTemplate;
-    use crate::util::{add_support_graphs, apply_attribute_constraints, build_node_binding_to_log_odds_data_map};
+    use crate::util::{add_support_graphs, build_node_binding_to_log_odds_data_map, find_edge_keys_to_remove};
     use itertools::Itertools;
     use merge_hashmap::Merge;
     use ordered_float::OrderedFloat;
@@ -750,11 +830,11 @@ mod test {
         .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), vec!["qwer", "sdfg"].into());
-        apply_attribute_constraints(ac, &mut edge_map);
+        find_edge_keys_to_remove(ac, &mut edge_map);
         assert_eq!(1, edge_map.len());
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), vec!["wert"].into());
-        apply_attribute_constraints(ac, &mut edge_map);
+        find_edge_keys_to_remove(ac, &mut edge_map);
         assert_eq!(0, edge_map.len());
     }
 
@@ -779,11 +859,11 @@ mod test {
         .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), "qwer".into());
-        apply_attribute_constraints(ac, &mut edge_map);
+        find_edge_keys_to_remove(ac, &mut edge_map);
         assert_eq!(1, edge_map.len());
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), "zxcv".into());
-        apply_attribute_constraints(ac, &mut edge_map);
+        find_edge_keys_to_remove(ac, &mut edge_map);
         assert_eq!(0, edge_map.len());
     }
 
@@ -808,11 +888,11 @@ mod test {
         .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), 100.into());
-        apply_attribute_constraints(ac, &mut edge_map);
+        find_edge_keys_to_remove(ac, &mut edge_map);
         assert_eq!(1, edge_map.len());
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), 200.into());
-        apply_attribute_constraints(ac, &mut edge_map);
+        find_edge_keys_to_remove(ac, &mut edge_map);
         assert_eq!(0, edge_map.len());
     }
 
@@ -837,11 +917,11 @@ mod test {
         .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), ">".to_string(), 20.into());
-        apply_attribute_constraints(ac, &mut edge_map);
+        find_edge_keys_to_remove(ac, &mut edge_map);
         assert_eq!(1, edge_map.len());
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), ">".to_string(), 200.into());
-        apply_attribute_constraints(ac, &mut edge_map);
+        find_edge_keys_to_remove(ac, &mut edge_map);
         assert_eq!(0, edge_map.len());
     }
 
@@ -866,11 +946,11 @@ mod test {
         .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "<".to_string(), 200.into());
-        apply_attribute_constraints(ac, &mut edge_map);
+        find_edge_keys_to_remove(ac, &mut edge_map);
         assert_eq!(1, edge_map.len());
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "<".to_string(), 20.into());
-        apply_attribute_constraints(ac, &mut edge_map);
+        find_edge_keys_to_remove(ac, &mut edge_map);
         assert_eq!(0, edge_map.len());
     }
 
@@ -895,11 +975,11 @@ mod test {
         .unwrap();
 
         let ac = AttributeConstraint::new("biolink:asdf".to_string(), "asdf".to_string(), "matches".to_string(), "^.+asdf.+$".into());
-        apply_attribute_constraints(ac, &mut edge_map);
+        find_edge_keys_to_remove(ac, &mut edge_map);
         assert_eq!(1, edge_map.len());
 
         let ac = AttributeConstraint::new("biolink:asdf".to_string(), "asdf".to_string(), "matches".to_string(), "^.+zxcv.+$".into());
-        apply_attribute_constraints(ac, &mut edge_map);
+        find_edge_keys_to_remove(ac, &mut edge_map);
         assert_eq!(0, edge_map.len());
     }
 
