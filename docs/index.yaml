@@ -2,16 +2,25 @@ apiVersion: v1
 entries:
   cqs:
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.040234315-04:00"
+    created: "2024-04-29T11:33:09.047832413-04:00"
     description: A Helm chart for Kubernetes
-    digest: 1106f805a6abea314f4455a917a4ff4fb7b0abbaf294fa240f484691246c511c
+    digest: 5321002988c1aa231417355e0bd5aee9388b36cca47cfb373cb920c34fe7ba9a
+    name: cqs
+    type: application
+    urls:
+    - https://translatorsri.github.io/CQS/cqs-0.3.1.tgz
+    version: 0.3.1
+  - apiVersion: v2
+    created: "2024-04-29T11:33:09.047300241-04:00"
+    description: A Helm chart for Kubernetes
+    digest: b8a3c11914f639f7310e53ec5f7209889236ea4d1e13444b3a2cc7da510a03a4
     name: cqs
     type: application
     urls:
     - https://translatorsri.github.io/CQS/cqs-0.3.0.tgz
     version: 0.3.0
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.036457171-04:00"
+    created: "2024-04-29T11:33:09.034230586-04:00"
     description: A Helm chart for Kubernetes
     digest: c1c6c78874250750f9a5e496c487588b628a244e134fcac35d6e9ab571edcb83
     name: cqs
@@ -20,7 +29,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.19.tgz
     version: 0.2.19
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.036100859-04:00"
+    created: "2024-04-29T11:33:09.033701495-04:00"
     description: A Helm chart for Kubernetes
     digest: dc128f8988d83382d11b4b3d6df39a47c2d6ea07080f193863a033e2e82c4a5d
     name: cqs
@@ -29,7 +38,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.18.tgz
     version: 0.2.18
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.035730965-04:00"
+    created: "2024-04-29T11:33:09.033185607-04:00"
     description: A Helm chart for Kubernetes
     digest: 5b3909bf12ccc50f535117d4286ba8051badf652bf5d07064b54d9829117385c
     name: cqs
@@ -38,7 +47,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.17.tgz
     version: 0.2.17
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.035362145-04:00"
+    created: "2024-04-29T11:33:09.032670588-04:00"
     description: A Helm chart for Kubernetes
     digest: 93dbb88589ca7aa313d44a6374c5cd70f3284e4a583929ea1fbc3806e9122cb9
     name: cqs
@@ -47,7 +56,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.16.tgz
     version: 0.2.16
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.035021498-04:00"
+    created: "2024-04-29T11:33:09.032140186-04:00"
     description: A Helm chart for Kubernetes
     digest: 2d9bc38157ad333992a1090d0d46298017df40f564a3e1193495168df31c51fb
     name: cqs
@@ -56,7 +65,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.15.tgz
     version: 0.2.15
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.034683674-04:00"
+    created: "2024-04-29T11:33:09.031621248-04:00"
     description: A Helm chart for Kubernetes
     digest: b8480710b0d941bea3186311e6b063b16447f0b26d85f0fa9e973150322a800e
     name: cqs
@@ -65,7 +74,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.14.tgz
     version: 0.2.14
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.034336201-04:00"
+    created: "2024-04-29T11:33:09.031085989-04:00"
     description: A Helm chart for Kubernetes
     digest: 52381bef47e3731af989f5019daf43d8a8e82580c26e7eaccd3132fc016ccb78
     name: cqs
@@ -74,7 +83,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.13.tgz
     version: 0.2.13
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.033981355-04:00"
+    created: "2024-04-29T11:33:09.030528631-04:00"
     description: A Helm chart for Kubernetes
     digest: 84ba594fc41cbd7142978b2e87d894aa8f9fd6801f851de686145db6a50ff652
     name: cqs
@@ -83,7 +92,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.12.tgz
     version: 0.2.12
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.033642049-04:00"
+    created: "2024-04-29T11:33:09.029995419-04:00"
     description: A Helm chart for Kubernetes
     digest: eaaba6fdd2388c933dd395835879e2eccd91da93fb7b48f7276a759de9e33a6a
     name: cqs
@@ -92,7 +101,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.11.tgz
     version: 0.2.11
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.033301173-04:00"
+    created: "2024-04-29T11:33:09.029461651-04:00"
     description: A Helm chart for Kubernetes
     digest: 6ee7e300fd81ca08e511a95babbde42cede1ff664fde2253b05c0dca042768a0
     name: cqs
@@ -101,7 +110,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.10.tgz
     version: 0.2.10
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.039882369-04:00"
+    created: "2024-04-29T11:33:09.039146326-04:00"
     description: A Helm chart for Kubernetes
     digest: 4126d57bcc23cc77739b1e99213a9e7450be0cbfa307665da531c2f6de7998ef
     name: cqs
@@ -110,7 +119,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.9.tgz
     version: 0.2.9
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.039535927-04:00"
+    created: "2024-04-29T11:33:09.038635654-04:00"
     description: A Helm chart for Kubernetes
     digest: 11da1bfc3931bf3afadbeec80b76dd800caeb1650872abc5a13719a79e801b10
     name: cqs
@@ -119,7 +128,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.8.tgz
     version: 0.2.8
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.03918555-04:00"
+    created: "2024-04-29T11:33:09.038110158-04:00"
     description: A Helm chart for Kubernetes
     digest: 4d377d8b15a026529434bc5448cf83afdb5c54837fed47ae0b68c73b741d1a37
     name: cqs
@@ -128,7 +137,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.7.tgz
     version: 0.2.7
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.038782967-04:00"
+    created: "2024-04-29T11:33:09.037581058-04:00"
     description: A Helm chart for Kubernetes
     digest: e0482ee2744b4ff3a1725b1dc8a3af2ef83e902ea7b085438b52ef2553a629aa
     name: cqs
@@ -137,7 +146,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.6.tgz
     version: 0.2.6
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.038432398-04:00"
+    created: "2024-04-29T11:33:09.03704212-04:00"
     description: A Helm chart for Kubernetes
     digest: 7487ac82d1cfca6adf58b66ca80cae83c75a51ace4e4de157c814e7223a234c7
     name: cqs
@@ -146,7 +155,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.5.tgz
     version: 0.2.5
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.038056229-04:00"
+    created: "2024-04-29T11:33:09.036496789-04:00"
     description: A Helm chart for Kubernetes
     digest: 0ae2ab634c03ca8600c1e44fdd7f158ee350894cca3c5b49fcaf902289148d74
     name: cqs
@@ -155,7 +164,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.4.tgz
     version: 0.2.4
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.037658873-04:00"
+    created: "2024-04-29T11:33:09.035924097-04:00"
     description: A Helm chart for Kubernetes
     digest: 451069553a45fd38ecf5f3bb0009e60dcd42283ef963be1785872de8932c5bc4
     name: cqs
@@ -164,7 +173,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.3.tgz
     version: 0.2.3
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.037282394-04:00"
+    created: "2024-04-29T11:33:09.034748266-04:00"
     description: A Helm chart for Kubernetes
     digest: 7867f73c7fe80e1296569eb4e3688d88e8eec3843c3d4b33967857cbc3fb3583
     name: cqs
@@ -173,7 +182,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.2.tgz
     version: 0.2.2
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.032940725-04:00"
+    created: "2024-04-29T11:33:09.028926387-04:00"
     description: A Helm chart for Kubernetes
     digest: 5efd05ca5119a118a28edefc8253740e3b3e45fa33778dd8fcf7f0300f753ca8
     name: cqs
@@ -182,7 +191,7 @@ entries:
     - https://translatorsri.github.io/CQS/cqs-0.2.1.tgz
     version: 0.2.1
   - apiVersion: v2
-    created: "2024-04-25T12:43:41.032562107-04:00"
+    created: "2024-04-29T11:33:09.028386465-04:00"
     description: A Helm chart for Kubernetes
     digest: 32003b80c0b54a4bd635c960e2170d29ef3d61c3732d0c70143a7dd7b1203ce7
     name: cqs
@@ -190,4 +199,4 @@ entries:
     urls:
     - https://translatorsri.github.io/CQS/cqs-0.2.0.tgz
     version: 0.2.0
-generated: "2024-04-25T12:43:41.032083729-04:00"
+generated: "2024-04-29T11:33:09.027667023-04:00"
