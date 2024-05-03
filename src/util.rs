@@ -617,19 +617,23 @@ pub fn find_edge_keys_to_remove(ac: trapi_model_rs::AttributeConstraint, edge_ma
                                 Value::Null => {}
                                 Value::Bool(_) => {}
                                 Value::Number(ev) => {
-                                    if ev.as_i64().unwrap() <= ac.value.as_i64().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = ac.value.as_i64() {
+                                        if ev.as_i64().unwrap() <= ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                                 Value::String(ev) => {
-                                    if ev.parse::<i64>().unwrap() <= ac.value.as_i64().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = ac.value.as_i64() {
+                                        if ev.parse::<i64>().unwrap() <= ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                                 Value::Array(ev) => {
                                     if !ev.is_empty() {
-                                        if let Some(first) = ev.first() {
-                                            if first.as_i64().unwrap() <= ac.value.as_i64().unwrap() {
+                                        if let (Some(first), Some(ac_v)) = (ev.first(), ac.value.as_i64()) {
+                                            if first.as_i64().unwrap() <= ac_v {
                                                 to_remove.push(k.clone());
                                             }
                                         }
@@ -651,19 +655,23 @@ pub fn find_edge_keys_to_remove(ac: trapi_model_rs::AttributeConstraint, edge_ma
                                 Value::Null => {}
                                 Value::Bool(_) => {}
                                 Value::Number(ev) => {
-                                    if ev.as_i64().unwrap() >= ac.value.as_i64().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = ac.value.as_i64() {
+                                        if ev.as_i64().unwrap() >= ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                                 Value::String(ev) => {
-                                    if ev.parse::<i64>().unwrap() >= ac.value.as_i64().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = ac.value.as_i64() {
+                                        if ev.parse::<i64>().unwrap() >= ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                                 Value::Array(ev) => {
                                     if !ev.is_empty() {
-                                        if let Some(first) = ev.first() {
-                                            if first.as_i64().unwrap() >= ac.value.as_i64().unwrap() {
+                                        if let (Some(first), Some(ac_v)) = (ev.first(), ac.value.as_i64()) {
+                                            if first.as_i64().unwrap() >= ac_v {
                                                 to_remove.push(k.clone());
                                             }
                                         }
@@ -684,18 +692,24 @@ pub fn find_edge_keys_to_remove(ac: trapi_model_rs::AttributeConstraint, edge_ma
                             match &e.value {
                                 Value::Null => {}
                                 Value::Bool(ev) => {
-                                    if ev != &ac.value.as_bool().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = &ac.value.as_bool() {
+                                        if ev != ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                                 Value::Number(ev) => {
-                                    if ev.as_i64().unwrap() != ac.value.as_i64().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = ac.value.as_i64() {
+                                        if ev.as_i64().unwrap() != ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                                 Value::String(ev) => {
-                                    if ev != ac.value.as_str().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = ac.value.as_str() {
+                                        if ev != ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                                 Value::Array(ev) => {
@@ -711,8 +725,10 @@ pub fn find_edge_keys_to_remove(ac: trapi_model_rs::AttributeConstraint, edge_ma
                                 }
                                 Value::Object(ev) => {
                                     // FIXME this feels too restrictive/inaccurate
-                                    if ev != ac.value.as_object().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = ac.value.as_object() {
+                                        if ev != ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                             }
@@ -729,28 +745,38 @@ pub fn find_edge_keys_to_remove(ac: trapi_model_rs::AttributeConstraint, edge_ma
                             match &e.value {
                                 Value::Null => {}
                                 Value::Bool(ev) => {
-                                    if ev != &ac.value.as_bool().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = &ac.value.as_bool() {
+                                        if ev != ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                                 Value::Number(ev) => {
-                                    if ev.as_i64().unwrap() != ac.value.as_i64().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = ac.value.as_i64() {
+                                        if ev.as_i64().unwrap() != ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                                 Value::String(ev) => {
-                                    if ev != ac.value.as_str().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = ac.value.as_str() {
+                                        if ev != ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                                 Value::Array(ev) => {
-                                    if ev != ac.value.as_array().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = ac.value.as_array() {
+                                        if ev != ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                                 Value::Object(ev) => {
-                                    if ev != ac.value.as_object().unwrap() {
-                                        to_remove.push(k.clone());
+                                    if let Some(ac_v) = ac.value.as_object() {
+                                        if ev != ac_v {
+                                            to_remove.push(k.clone());
+                                        }
                                     }
                                 }
                             }
