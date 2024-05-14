@@ -21,6 +21,7 @@
           "attribute_constraints": [
             {
               "id": "biolink:evidence_count",
+              "name": "Evidence Count",
               "operator": ">",
               "value": "20"
             }
