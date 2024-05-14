@@ -64,27 +64,23 @@
       },
       "nodes": {
         "n0": {
-          "ids": [],
-          "is_set": false
+          "ids": []
         },
         "n1": {
           "categories": [
             "biolink:SmallMolecule"
-          ],
-          "is_set": false
+          ]
         },
         "n2": {
           "categories": [
             "biolink:Gene",
             "biolink:Protein"
-          ],
-          "is_set": false
+          ]
         },
         "n3": {
           "categories": [
             "biolink:Drug"
-          ],
-          "is_set": false
+          ]
         }
       }
     }

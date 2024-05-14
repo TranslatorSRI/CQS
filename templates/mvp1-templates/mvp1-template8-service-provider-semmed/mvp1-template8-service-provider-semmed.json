@@ -27,15 +27,13 @@
         "n0": {
           "categories": [
             "biolink:ChemicalEntity"
-          ],
-          "is_set": false
+          ]
         },
         "n1": {
           "categories": [
             "biolink:DiseaseOrPhenotypicFeature"
           ],
-          "ids": [],
-          "is_set": false
+          "ids": []
         }
       }
     }
