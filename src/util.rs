@@ -841,13 +841,9 @@ mod test {
               "sources": [],
               "attributes": [
                 {
-                  "attribute_type_id": "biolink:evidence_count",
-                  "original_attribute_name": "evidence_count",
-                  "value": [
-                    "qwer",
-                    "asdf",
-                    "zxcv"
-                ],
+                  "attribute_type_id": "biolink:max_research_phase",
+                  "original_attribute_name": "max_research_phase",
+                  "value": [ "2.0" ],
                   "value_type_id": "EDAM:data_1772"
                 },
               ]
@@ -855,12 +851,23 @@ mod test {
         }))
         .unwrap();
 
-        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), vec!["qwer", "sdfg"].into());
-        find_edge_keys_to_remove(ac, &mut edge_map);
+        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), vec!["1.0", "2.0"].into());
+        let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
+        for ek in edge_keys_to_remove.iter() {
+            edge_map.remove(ek);
+        }
         assert_eq!(1, edge_map.len());
 
-        let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), vec!["wert"].into());
-        find_edge_keys_to_remove(ac, &mut edge_map);
+        let ac = AttributeConstraint::new(
+            "biolink:max_research_phase".to_string(),
+            "asdf".to_string(),
+            "==".to_string(),
+            vec!["clinical_trial_phase_1", "clinical_trial_phase_2", "clinical_trial_phase_3"].into(),
+        );
+        let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
+        for ek in edge_keys_to_remove.iter() {
+            edge_map.remove(ek);
+        }
         assert_eq!(0, edge_map.len());
     }
 
@@ -885,11 +892,17 @@ mod test {
         .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), "qwer".into());
-        find_edge_keys_to_remove(ac, &mut edge_map);
+        let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
+        for ek in edge_keys_to_remove.iter() {
+            edge_map.remove(ek);
+        }
         assert_eq!(1, edge_map.len());
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), "zxcv".into());
-        find_edge_keys_to_remove(ac, &mut edge_map);
+        let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
+        for ek in edge_keys_to_remove.iter() {
+            edge_map.remove(ek);
+        }
         assert_eq!(0, edge_map.len());
     }
 
@@ -914,11 +927,17 @@ mod test {
         .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), 100.into());
-        find_edge_keys_to_remove(ac, &mut edge_map);
+        let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
+        for ek in edge_keys_to_remove.iter() {
+            edge_map.remove(ek);
+        }
         assert_eq!(1, edge_map.len());
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), 200.into());
-        find_edge_keys_to_remove(ac, &mut edge_map);
+        let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
+        for ek in edge_keys_to_remove.iter() {
+            edge_map.remove(ek);
+        }
         assert_eq!(0, edge_map.len());
     }
 
@@ -943,11 +962,17 @@ mod test {
         .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), ">".to_string(), 20.into());
-        find_edge_keys_to_remove(ac, &mut edge_map);
+        let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
+        for ek in edge_keys_to_remove.iter() {
+            edge_map.remove(ek);
+        }
         assert_eq!(1, edge_map.len());
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), ">".to_string(), 200.into());
-        find_edge_keys_to_remove(ac, &mut edge_map);
+        let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
+        for ek in edge_keys_to_remove.iter() {
+            edge_map.remove(ek);
+        }
         assert_eq!(0, edge_map.len());
     }
 
@@ -972,11 +997,17 @@ mod test {
         .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "<".to_string(), 200.into());
-        find_edge_keys_to_remove(ac, &mut edge_map);
+        let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
+        for ek in edge_keys_to_remove.iter() {
+            edge_map.remove(ek);
+        }
         assert_eq!(1, edge_map.len());
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "<".to_string(), 20.into());
-        find_edge_keys_to_remove(ac, &mut edge_map);
+        let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
+        for ek in edge_keys_to_remove.iter() {
+            edge_map.remove(ek);
+        }
         assert_eq!(0, edge_map.len());
     }
 
@@ -1001,11 +1032,17 @@ mod test {
         .unwrap();
 
         let ac = AttributeConstraint::new("biolink:asdf".to_string(), "asdf".to_string(), "matches".to_string(), "^.+asdf.+$".into());
-        find_edge_keys_to_remove(ac, &mut edge_map);
+        let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
+        for ek in edge_keys_to_remove.iter() {
+            edge_map.remove(ek);
+        }
         assert_eq!(1, edge_map.len());
 
         let ac = AttributeConstraint::new("biolink:asdf".to_string(), "asdf".to_string(), "matches".to_string(), "^.+zxcv.+$".into());
-        find_edge_keys_to_remove(ac, &mut edge_map);
+        let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
+        for ek in edge_keys_to_remove.iter() {
+            edge_map.remove(ek);
+        }
         assert_eq!(0, edge_map.len());
     }
 
