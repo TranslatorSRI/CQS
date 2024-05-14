@@ -56,20 +56,26 @@ lazy_static! {
     pub static ref DB_POOL: AsyncOnce<bb8::Pool<AsyncDieselConnectionManager<AsyncPgConnection>>> = AsyncOnce::new(async {
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
-        let pool = Pool::builder().connection_timeout(Duration::from_secs(120)).build(config).await;
-        pool.unwrap()
+        let result = Pool::builder().connection_timeout(Duration::from_secs(120)).build(config).await;
+        match result {
+            Ok(pool) => pool,
+            Err(e) => panic!("Could not create DB Connection Pool: {}", e),
+        }
     });
     pub static ref REQWEST_CLIENT: AsyncOnce<reqwest::Client> = AsyncOnce::new(async {
         let mut headers = header::HeaderMap::new();
         headers.insert(header::ACCEPT, header::HeaderValue::from_static("application/json"));
         headers.insert(header::CONTENT_TYPE, header::HeaderValue::from_static("application/json"));
-        let reqwest_client = reqwest::Client::builder()
+        let result = reqwest::Client::builder()
             .redirect(Policy::limited(3))
             .timeout(Duration::from_secs(900))
             .default_headers(headers)
-            .build()
-            .expect("Could not build reqwest client");
-        reqwest_client
+            .build();
+
+        match result {
+            Ok(request_client) => request_client,
+            Err(e) => panic!("Could not create Reqwest Client: {}", e),
+        }
     });
 }
 
