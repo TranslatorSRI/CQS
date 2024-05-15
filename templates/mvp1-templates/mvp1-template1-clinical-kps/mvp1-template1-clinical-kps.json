@@ -34,7 +34,6 @@
           "subject": "n1",
           "object": "n2",
           "predicates": [
-            "biolink:affects_activity_of",
             "biolink:physically_interacts_with"
           ],
           "provided_by": {
@@ -48,7 +47,6 @@
           "subject": "n3",
           "object": "n2",
           "predicates": [
-            "biolink:affects_activity_of",
             "biolink:physically_interacts_with"
           ]
         },
