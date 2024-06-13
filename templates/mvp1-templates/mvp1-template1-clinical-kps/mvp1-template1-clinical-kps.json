@@ -85,10 +85,13 @@
       }
     }
   },
-  "cqs_edge_source": [
-    {
-      "resource_id": "infores:cqs",
-      "resource_role": "primary_knowledge_source"
-    }
-  ]
+  "cqs": {
+    "results_limit": 50,
+    "edge_sources": [
+      {
+        "resource_id": "infores:cqs",
+        "resource_role": "primary_knowledge_source"
+      }
+    ]
+  }
 }
