@@ -8,8 +8,8 @@ use ordered_float::OrderedFloat;
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
-use std::env;
 use std::time::Duration;
+use std::{env, fs};
 use trapi_model_rs::{Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, Edge, EdgeBinding, KnowledgeType, Message, NodeBinding, ResourceRoleEnum, Response};
 
 #[allow(dead_code)]
@@ -280,7 +280,7 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn template:
                             first_drug_node_id.id.clone(),
                             BiolinkPredicate::from("biolink:treats"),
                             first_disease_node_id.id.clone(),
-                            query_template.cqs_edge_source.clone(),
+                            query_template.cqs.edge_sources.clone(),
                         );
                         new_edge.attributes = Some(vec![Attribute::new("biolink:support_graphs".to_string(), serde_json::Value::from(auxiliary_graph_ids))]);
                         // println!("new_edge: {:?}", new_edge);
@@ -364,6 +364,30 @@ pub fn group_results(message: &mut Message) {
     message.results = Some(new_results);
 }
 
+pub fn compute_composite_score(entry_values: Vec<CQSCompositeScoreValue>) -> f64 {
+    let total_sample_sizes: Vec<_> = entry_values.iter().filter_map(|ev| ev.total_sample_size).collect();
+    let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
+    let weights: Vec<_> = entry_values
+        .iter()
+        .map(|ev| ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64)
+        .collect();
+    let sum_of_weights = weights.iter().sum::<f64>(); // (W1 + W2 + W3)
+
+    let score_numerator = entry_values
+        .iter()
+        .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
+        .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
+
+    let score = score_numerator / sum_of_weights;
+    let score_abs = score.abs();
+
+    if score_abs.is_nan() {
+        0.01_f64.atan() * 2.0 / std::f64::consts::PI
+    } else {
+        score.atan() * 2.0 / std::f64::consts::PI
+    }
+}
+
 pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi_model_rs::CURIE>) -> Option<Response> {
     let request_client = REQWEST_CLIENT.get().await;
 
@@ -416,19 +440,19 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
     }
 
     if let Some(mut tr) = trapi_response {
-        match env::var("WRITE_WFR_OUTPUT").unwrap_or("false".to_string()).as_str() {
-            "true" => {
-                let parent_dir = std::path::Path::new("/tmp/cqs");
-                if parent_dir.exists() {
-                    std::fs::write(
-                        std::path::Path::join(parent_dir, format!("pre-{}-{}.json", cqs_query.name(), uuid::Uuid::new_v4().to_string()).as_str()),
-                        serde_json::to_string_pretty(&tr).unwrap(),
-                    )
-                    .expect("failed to write output");
-                }
+        let uuid = uuid::Uuid::new_v4().to_string();
+        if let Ok(wfr_output_dir) = env::var("WFR_OUTPUT_DIR") {
+            let parent_dir = std::path::Path::new(&wfr_output_dir);
+            if !parent_dir.exists() {
+                fs::create_dir_all(parent_dir).expect(format!("Could not create directory: {:?}", parent_dir).as_str());
             }
-            _ => {}
-        };
+            fs::write(
+                std::path::Path::join(parent_dir, format!("{}-{}-pre.json", cqs_query.name(), uuid).as_str()),
+                serde_json::to_string_pretty(&tr).unwrap(),
+            )
+            .expect("failed to write output");
+        }
+
         if let (Some(ac), Some(kg)) = (attribute_constraint, &mut tr.message.knowledge_graph) {
             let edge_keys_to_remove = find_edge_keys_to_remove(ac.clone(), &kg.edges);
             debug!("{}, {:?}, removing edges: {:?}", cqs_query.name(), ac, edge_keys_to_remove);
@@ -454,19 +478,26 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
         }
         add_support_graphs(&mut tr, cqs_query, &query_template);
 
-        match env::var("WRITE_WFR_OUTPUT").unwrap_or("false".to_string()).as_str() {
-            "true" => {
-                let parent_dir = std::path::Path::new("/tmp/cqs");
-                if parent_dir.exists() {
-                    std::fs::write(
-                        std::path::Path::join(parent_dir, format!("post-{}-{}.json", cqs_query.name(), uuid::Uuid::new_v4().to_string()).as_str()),
-                        serde_json::to_string_pretty(&tr).unwrap(),
-                    )
-                    .expect("failed to write output");
-                }
+        sort_analysis_by_score(&mut tr.message);
+        sort_results_by_analysis_score(&mut tr.message);
+
+        if let Some(results) = &mut tr.message.results {
+            if let Some(limit) = query_template.cqs.results_limit {
+                results.truncate(limit);
             }
-            _ => {}
-        };
+        }
+
+        if let Ok(wfr_output_dir) = env::var("WFR_OUTPUT_DIR") {
+            let parent_dir = std::path::Path::new(&wfr_output_dir);
+            if !parent_dir.exists() {
+                fs::create_dir_all(parent_dir).expect(format!("Could not create directory: {:?}", parent_dir).as_str());
+            }
+            fs::write(
+                std::path::Path::join(parent_dir, format!("{}-{}-post.json", cqs_query.name(), uuid).as_str()),
+                serde_json::to_string_pretty(&tr).unwrap(),
+            )
+            .expect("failed to write output");
+        }
 
         Some(tr)
     } else {
@@ -529,6 +560,10 @@ pub async fn process_asyncquery_jobs() {
                 group_results(&mut message);
                 sort_analysis_by_score(&mut message);
                 sort_results_by_analysis_score(&mut message);
+
+                if let Some(results) = &mut message.results {
+                    results.truncate(250);
+                }
 
                 // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
                 // let message_with_score_attributes = util::add_composite_score_attributes(message, node_binding_to_log_odds_map);
@@ -607,196 +642,187 @@ pub async fn delete_stale_asyncquery_jobs() {
 
 pub fn find_edge_keys_to_remove(ac: trapi_model_rs::AttributeConstraint, edge_map: &HashMap<String, Edge>) -> Vec<String> {
     let mut to_remove = vec![];
+
     match ac.operator.as_str() {
         ">" => {
             edge_map.iter().for_each(|(k, v)| {
                 if let Some(edge_attributes) = &v.attributes {
-                    edge_attributes.iter().for_each(|e| {
-                        if e.attribute_type_id == ac.id {
-                            match &e.value {
-                                Value::Null => {}
-                                Value::Bool(_) => {}
-                                Value::Number(ev) => {
-                                    if let Some(ac_v) = ac.value.as_i64() {
-                                        if ev.as_i64().unwrap() <= ac_v {
-                                            to_remove.push(k.clone());
-                                        }
+                    if let Some(edge_attribute) = edge_attributes.iter().find(|edge_attribute| edge_attribute.attribute_type_id == ac.id) {
+                        match &edge_attribute.value {
+                            Value::Null => {}
+                            Value::Bool(_) => {}
+                            Value::Number(ev) => {
+                                if let Some(ac_v) = ac.value.as_i64() {
+                                    if ev.as_i64().unwrap() <= ac_v {
+                                        to_remove.push(k.clone());
                                     }
                                 }
-                                Value::String(ev) => {
-                                    if let Some(ac_v) = ac.value.as_i64() {
-                                        if ev.parse::<i64>().unwrap() <= ac_v {
-                                            to_remove.push(k.clone());
-                                        }
-                                    }
-                                }
-                                Value::Array(ev) => {
-                                    if !ev.is_empty() {
-                                        if let (Some(first), Some(ac_v)) = (ev.first(), ac.value.as_i64()) {
-                                            if first.as_i64().unwrap() <= ac_v {
-                                                to_remove.push(k.clone());
-                                            }
-                                        }
-                                    }
-                                }
-                                Value::Object(_) => {}
                             }
+                            Value::String(ev) => {
+                                if let Some(ac_v) = ac.value.as_i64() {
+                                    if ev.parse::<i64>().unwrap() <= ac_v {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                            }
+                            Value::Array(ev) => {
+                                if !ev.is_empty() {
+                                    if let (Some(first), Some(ac_v)) = (ev.first(), ac.value.as_i64()) {
+                                        if first.as_i64().unwrap() <= ac_v {
+                                            to_remove.push(k.clone());
+                                        }
+                                    }
+                                }
+                            }
+                            Value::Object(_) => {}
                         }
-                    });
+                    }
                 }
             });
         }
         "<" => {
             edge_map.iter().for_each(|(k, v)| {
                 if let Some(edge_attributes) = &v.attributes {
-                    edge_attributes.iter().for_each(|e| {
-                        if e.attribute_type_id == ac.id {
-                            match &e.value {
-                                Value::Null => {}
-                                Value::Bool(_) => {}
-                                Value::Number(ev) => {
-                                    if let Some(ac_v) = ac.value.as_i64() {
-                                        if ev.as_i64().unwrap() >= ac_v {
-                                            to_remove.push(k.clone());
-                                        }
+                    if let Some(edge_attribute) = edge_attributes.iter().find(|edge_attribute| edge_attribute.attribute_type_id == ac.id) {
+                        match &edge_attribute.value {
+                            Value::Null => {}
+                            Value::Bool(_) => {}
+                            Value::Number(ev) => {
+                                if let Some(ac_v) = ac.value.as_i64() {
+                                    if ev.as_i64().unwrap() >= ac_v {
+                                        to_remove.push(k.clone());
                                     }
                                 }
-                                Value::String(ev) => {
-                                    if let Some(ac_v) = ac.value.as_i64() {
-                                        if ev.parse::<i64>().unwrap() >= ac_v {
-                                            to_remove.push(k.clone());
-                                        }
-                                    }
-                                }
-                                Value::Array(ev) => {
-                                    if !ev.is_empty() {
-                                        if let (Some(first), Some(ac_v)) = (ev.first(), ac.value.as_i64()) {
-                                            if first.as_i64().unwrap() >= ac_v {
-                                                to_remove.push(k.clone());
-                                            }
-                                        }
-                                    }
-                                }
-                                Value::Object(_) => {}
                             }
+                            Value::String(ev) => {
+                                if let Some(ac_v) = ac.value.as_i64() {
+                                    if ev.parse::<i64>().unwrap() >= ac_v {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                            }
+                            Value::Array(ev) => {
+                                if !ev.is_empty() {
+                                    if let (Some(first), Some(ac_v)) = (ev.first(), ac.value.as_i64()) {
+                                        if first.as_i64().unwrap() >= ac_v {
+                                            to_remove.push(k.clone());
+                                        }
+                                    }
+                                }
+                            }
+                            Value::Object(_) => {}
                         }
-                    });
+                    }
                 }
             });
         }
         "==" => {
             edge_map.iter().for_each(|(k, v)| {
                 if let Some(edge_attributes) = &v.attributes {
-                    edge_attributes.iter().for_each(|e| {
-                        if e.attribute_type_id == ac.id {
-                            match &e.value {
-                                Value::Null => {}
-                                Value::Bool(ev) => {
-                                    if let Some(ac_v) = &ac.value.as_bool() {
-                                        if ev != ac_v {
-                                            to_remove.push(k.clone());
-                                        }
-                                    }
-                                }
-                                Value::Number(ev) => {
-                                    if let Some(ac_v) = ac.value.as_i64() {
-                                        if ev.as_i64().unwrap() != ac_v {
-                                            to_remove.push(k.clone());
-                                        }
-                                    }
-                                }
-                                Value::String(ev) => {
-                                    if let Some(ac_v) = ac.value.as_str() {
-                                        if ev != ac_v {
-                                            to_remove.push(k.clone());
-                                        }
-                                    }
-                                }
-                                Value::Array(ev) => {
-                                    // assuming that 'ev' is a vector of strings since the AttributeConstraint.value will likely be a vector of strings
-                                    let ev_strings = ev.iter().map(|v| v.as_str().unwrap()).collect_vec();
-                                    let ac_array = ac.value.as_array().unwrap();
-                                    let ac_strings = ac_array.iter().map(|v| v.as_str().unwrap()).collect_vec();
-
-                                    if !ev_strings.iter().any(|x| ac_strings.contains(x)) {
-                                        // info!("!ev_strings.iter().any(|x| ac_strings.contains(x)) is true: {}", k.clone());
+                    if let Some(edge_attribute) = edge_attributes.iter().find(|edge_attribute| edge_attribute.attribute_type_id == ac.id) {
+                        match &edge_attribute.value {
+                            Value::Null => {}
+                            Value::Bool(ev) => {
+                                if let Some(ac_v) = &ac.value.as_bool() {
+                                    if ev != ac_v {
                                         to_remove.push(k.clone());
                                     }
                                 }
-                                Value::Object(ev) => {
-                                    // FIXME this feels too restrictive/inaccurate
-                                    if let Some(ac_v) = ac.value.as_object() {
-                                        if ev != ac_v {
-                                            to_remove.push(k.clone());
-                                        }
+                            }
+                            Value::Number(ev) => {
+                                if let Some(ac_v) = ac.value.as_i64() {
+                                    if ev.as_i64().unwrap() != ac_v {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                            }
+                            Value::String(ev) => {
+                                if let Some(ac_v) = ac.value.as_str() {
+                                    if ev != ac_v {
+                                        to_remove.push(k.clone());
+                                    }
+                                }
+                            }
+                            Value::Array(ev) => {
+                                // assuming that 'ev' is a vector of strings since the AttributeConstraint.value will likely be a vector of strings
+                                let ev_strings = ev.iter().map(|v| v.as_str().unwrap()).collect_vec();
+                                let ac_array = ac.value.as_array().unwrap();
+                                let ac_strings = ac_array.iter().map(|v| v.as_str().unwrap()).collect_vec();
+
+                                if !ev_strings.iter().any(|x| ac_strings.contains(x)) {
+                                    // info!("!ev_strings.iter().any(|x| ac_strings.contains(x)) is true: {}", k.clone());
+                                    to_remove.push(k.clone());
+                                }
+                            }
+                            Value::Object(ev) => {
+                                // FIXME this feels too restrictive/inaccurate
+                                if let Some(ac_v) = ac.value.as_object() {
+                                    if ev != ac_v {
+                                        to_remove.push(k.clone());
                                     }
                                 }
                             }
                         }
-                    });
+                    }
                 }
             });
         }
         "===" => {
             edge_map.iter().for_each(|(k, v)| {
                 if let Some(edge_attributes) = &v.attributes {
-                    edge_attributes.iter().for_each(|e| {
-                        if e.attribute_type_id == ac.id {
-                            match &e.value {
-                                Value::Null => {}
-                                Value::Bool(ev) => {
-                                    if let Some(ac_v) = &ac.value.as_bool() {
-                                        if ev != ac_v {
-                                            to_remove.push(k.clone());
-                                        }
+                    if let Some(edge_attribute) = edge_attributes.iter().find(|edge_attribute| edge_attribute.attribute_type_id == ac.id) {
+                        match &edge_attribute.value {
+                            Value::Null => {}
+                            Value::Bool(ev) => {
+                                if let Some(ac_v) = &ac.value.as_bool() {
+                                    if ev != ac_v {
+                                        to_remove.push(k.clone());
                                     }
                                 }
-                                Value::Number(ev) => {
-                                    if let Some(ac_v) = ac.value.as_i64() {
-                                        if ev.as_i64().unwrap() != ac_v {
-                                            to_remove.push(k.clone());
-                                        }
+                            }
+                            Value::Number(ev) => {
+                                if let Some(ac_v) = ac.value.as_i64() {
+                                    if ev.as_i64().unwrap() != ac_v {
+                                        to_remove.push(k.clone());
                                     }
                                 }
-                                Value::String(ev) => {
-                                    if let Some(ac_v) = ac.value.as_str() {
-                                        if ev != ac_v {
-                                            to_remove.push(k.clone());
-                                        }
+                            }
+                            Value::String(ev) => {
+                                if let Some(ac_v) = ac.value.as_str() {
+                                    if ev != ac_v {
+                                        to_remove.push(k.clone());
                                     }
                                 }
-                                Value::Array(ev) => {
-                                    if let Some(ac_v) = ac.value.as_array() {
-                                        if ev != ac_v {
-                                            to_remove.push(k.clone());
-                                        }
+                            }
+                            Value::Array(ev) => {
+                                if let Some(ac_v) = ac.value.as_array() {
+                                    if ev != ac_v {
+                                        to_remove.push(k.clone());
                                     }
                                 }
-                                Value::Object(ev) => {
-                                    if let Some(ac_v) = ac.value.as_object() {
-                                        if ev != ac_v {
-                                            to_remove.push(k.clone());
-                                        }
+                            }
+                            Value::Object(ev) => {
+                                if let Some(ac_v) = ac.value.as_object() {
+                                    if ev != ac_v {
+                                        to_remove.push(k.clone());
                                     }
                                 }
                             }
                         }
-                    });
+                    }
                 }
             });
         }
         "matches" => {
             edge_map.iter().for_each(|(k, v)| {
                 if let Some(edge_attributes) = &v.attributes {
-                    edge_attributes.iter().for_each(|e| {
-                        if e.attribute_type_id == ac.id {
-                            if let Ok(re) = regex::Regex::new(ac.value.as_str().unwrap()) {
-                                if !re.is_match(e.value.as_str().unwrap()) {
-                                    to_remove.push(k.clone());
-                                }
+                    if let Some(edge_attribute) = edge_attributes.iter().find(|edge_attribute| edge_attribute.attribute_type_id == ac.id) {
+                        if let Ok(re) = regex::Regex::new(ac.value.as_str().unwrap()) {
+                            if !re.is_match(edge_attribute.value.as_str().unwrap()) {
+                                to_remove.push(k.clone());
                             }
                         }
-                    });
+                    }
                 }
             });
         }
