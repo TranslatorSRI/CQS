@@ -12,6 +12,13 @@ use std::io::Write;
 use trapi_model_rs::{AttributeConstraint, Query, RetrievalSource};
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct CQS {
+    pub scoring_function: Option<String>,
+    pub results_limit: Option<usize>,
+    pub edge_sources: Vec<RetrievalSource>,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct QueryTemplate {
     pub workflow: Option<Vec<trapi_model_rs::Workflow>>,
 
@@ -23,7 +30,7 @@ pub struct QueryTemplate {
 
     pub bypass_cache: Option<bool>,
 
-    pub cqs_edge_source: Vec<RetrievalSource>,
+    pub cqs: CQS,
 }
 
 impl QueryTemplate {
