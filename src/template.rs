@@ -1,30 +1,7 @@
 use crate::model::CQSCompositeScoreValue;
 use crate::model::QueryTemplate;
+use crate::util;
 use std::fs;
-
-pub fn compute_composite_score(entry_values: Vec<CQSCompositeScoreValue>) -> f64 {
-    let total_sample_sizes: Vec<_> = entry_values.iter().filter_map(|ev| ev.total_sample_size).collect();
-    let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
-    let weights: Vec<_> = entry_values
-        .iter()
-        .map(|ev| ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64)
-        .collect();
-    let sum_of_weights = weights.iter().sum::<f64>(); // (W1 + W2 + W3)
-
-    let score_numerator = entry_values
-        .iter()
-        .map(|ev| (ev.total_sample_size.unwrap() as f64 / sum_of_total_sample_sizes as f64) * ev.log_odds_ratio.unwrap())
-        .sum::<f64>(); // (W1 * OR1 + W2 * OR2 + W3 * OR3)
-
-    let score = score_numerator / sum_of_weights;
-    let score_abs = score.abs();
-
-    if score_abs.is_nan() {
-        0.01_f64.atan() * 2.0 / std::f64::consts::PI
-    } else {
-        score.atan() * 2.0 / std::f64::consts::PI
-    }
-}
 
 pub trait CQSTemplate: Send + Sync {
     fn name(&self) -> String;
@@ -98,7 +75,7 @@ impl_wrapper!(
     "n1", //inferred_disease_node_id
     "n3", //template_drug_node_id
     "n0", //template_disease_node_id
-    compute_composite_score
+    util::compute_composite_score
 );
 // impl_wrapper!(
 //     ConnectionHypothesis,
@@ -118,7 +95,7 @@ impl_wrapper!(
     "n1", //inferred_disease_node_id
     "n0", //template_drug_node_id
     "n1", //template_disease_node_id
-    compute_composite_score
+    util::compute_composite_score
 );
 impl_wrapper!(
     ServiceProviderAeolus,
@@ -128,7 +105,7 @@ impl_wrapper!(
     "n1", //inferred_disease_node_id
     "n0", //template_drug_node_id
     "n1", //template_disease_node_id
-    compute_composite_score
+    util::compute_composite_score
 );
 impl_wrapper!(
     SpokeChembl,
@@ -138,7 +115,7 @@ impl_wrapper!(
     "n1",  //inferred_disease_node_id
     "n00", //template_drug_node_id
     "n01", //template_disease_node_id
-    compute_composite_score
+    util::compute_composite_score
 );
 impl_wrapper!(
     MoleProChembl,
@@ -148,7 +125,7 @@ impl_wrapper!(
     "n1",  //inferred_disease_node_id
     "n00", //template_drug_node_id
     "n01", //template_disease_node_id
-    compute_composite_score
+    util::compute_composite_score
 );
 impl_wrapper!(
     RTXKG2SemMed,
@@ -158,7 +135,7 @@ impl_wrapper!(
     "n1", //inferred_disease_node_id
     "n0", //template_drug_node_id
     "n1", //template_disease_node_id
-    compute_composite_score
+    util::compute_composite_score
 );
 impl_wrapper!(
     ServiceProviderSemMed,
@@ -168,7 +145,7 @@ impl_wrapper!(
     "n1", //inferred_disease_node_id
     "n0", //template_drug_node_id
     "n1", //template_disease_node_id
-    compute_composite_score
+    util::compute_composite_score
 );
 impl_wrapper!(
     ServiceProviderChembl,
@@ -178,7 +155,7 @@ impl_wrapper!(
     "n1",  //inferred_disease_node_id
     "n00", //template_drug_node_id
     "n01", //template_disease_node_id
-    compute_composite_score
+    util::compute_composite_score
 );
 impl_wrapper!(
     ServiceProviderTMKPTargeted,
@@ -188,5 +165,5 @@ impl_wrapper!(
     "n1", //inferred_disease_node_id
     "n0", //template_drug_node_id
     "n1", //template_disease_node_id
-    compute_composite_score
+    util::compute_composite_score
 );
