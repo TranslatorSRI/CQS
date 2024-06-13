@@ -34,7 +34,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - /tmp/cqs:/tmp/cqs
+      - "${WFR_OUTPUT_DIR}:/tmp/cqs"
     depends_on:
       - cqs-pg-db
       - callback-test-app
