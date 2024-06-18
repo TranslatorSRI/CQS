@@ -19,11 +19,10 @@ dotenvy = "^0.15"
 env_logger = "^0.11"
 futures = "^0.3"
 hyper = { version = "^0.14", features = ["client", "http1", "stream", "tcp"] }
-itertools = "^0.12"
+itertools = "^0.13"
 lazy_static = "^1.4"
 log = { version = "^0.4", features = ["std"] }
 merge-hashmap = { version = "^0.1", features = ["default", "merge_derive-hashmap"] }
-ordered-float = "^4.2"
 regex = "^1.10"
 reqwest = { version = "^0.12", features = ["default", "json"] }
 rocket = { version = "^0.5.0", features = ["json", "http2"] }
@@ -33,5 +32,5 @@ serde_derive = "^1.0"
 serde_json = "^1.0"
 serde_with = { version = "^3.1", features = ["std", "macros", "json"] }
 tokio = { version = "1.28.2", features = ["full"] }
-trapi-model-rs = { git = "https://github.com/jdr0887/trapi-model-rs.git", branch = "trapi-1.5" }
+trapi-model-rs = { git = "https://github.com/jdr0887/trapi-model-rs.git" }
 uuid = { version = "^1.4", features = ["v4"] }
