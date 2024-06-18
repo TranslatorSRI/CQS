@@ -174,7 +174,6 @@ async fn query(data: Json<Query>) -> Json<trapi_model_rs::Response> {
         message.merge(r.message);
     });
 
-    util::group_results(&mut message);
     util::sort_analysis_by_score(&mut message);
     util::sort_results_by_analysis_score(&mut message);
 

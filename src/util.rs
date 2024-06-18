@@ -4,7 +4,6 @@ use chrono::Utc;
 use futures::future::join_all;
 use itertools::Itertools;
 use merge_hashmap::Merge;
-use ordered_float::OrderedFloat;
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
@@ -309,61 +308,6 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn template:
     }
 }
 
-pub fn group_results(message: &mut Message) {
-    let mut new_results: Vec<trapi_model_rs::Result> = vec![];
-
-    if let Some(results) = &mut message.results {
-        // 1st pass is to create unique vec of results
-        results
-            .iter()
-            .for_each(|result| match new_results.iter_mut().find(|nr| nr.node_bindings == result.node_bindings) {
-                None => {
-                    let mut new_result = result.clone();
-                    new_result.analyses.clear();
-                    new_results.push(new_result);
-                }
-                Some(_found_result) => {}
-            });
-
-        // 2nd pass is to add analyses
-        for result in new_results.iter_mut() {
-            let analyses: Vec<_> = results
-                .iter()
-                .filter(|orig| result.node_bindings == orig.node_bindings)
-                .flat_map(|r| r.analyses.clone())
-                .collect();
-
-            let asdf = analyses.into_iter().map(|a| ((a.resource_id.clone(), OrderedFloat(a.score.unwrap())), a)).into_group_map();
-
-            for ((_resource_id, _score), v) in asdf.into_iter() {
-                match v.len() {
-                    1 => {
-                        result.analyses.extend(v);
-                    }
-                    _ => {
-                        let edge_binding_map = v
-                            .iter()
-                            .flat_map(|a| {
-                                a.edge_bindings
-                                    .iter()
-                                    .flat_map(|(eb_key, eb_value)| eb_value.iter().map(|eb| (eb_key.clone(), eb.clone())).collect::<Vec<_>>())
-                                    .collect::<Vec<_>>()
-                            })
-                            .into_group_map();
-
-                        if let Some(analysis) = v.iter().next() {
-                            let mut a = analysis.clone();
-                            a.edge_bindings = edge_binding_map.into_iter().collect();
-                            result.analyses.push(a);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    message.results = Some(new_results);
-}
-
 pub fn compute_composite_score(entry_values: Vec<CQSCompositeScoreValue>) -> f64 {
     let total_sample_sizes: Vec<_> = entry_values.iter().filter_map(|ev| ev.total_sample_size).collect();
     let sum_of_total_sample_sizes: i64 = total_sample_sizes.iter().sum(); // (N1 + N2 + N3)
@@ -557,7 +501,6 @@ pub async fn process_asyncquery_jobs() {
                     message.merge(r.message);
                 });
 
-                group_results(&mut message);
                 sort_analysis_by_score(&mut message);
                 sort_results_by_analysis_score(&mut message);
 
