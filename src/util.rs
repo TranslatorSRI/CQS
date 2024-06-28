@@ -420,6 +420,7 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
                 results.retain(|r| !results_to_remove.contains(r));
             }
         }
+
         add_support_graphs(&mut tr, cqs_query, &query_template);
 
         sort_analysis_by_score(&mut tr.message);
@@ -787,7 +788,6 @@ mod test {
     use crate::util::{add_support_graphs, build_node_binding_to_log_odds_data_map, find_edge_keys_to_remove};
     use itertools::Itertools;
     use merge_hashmap::Merge;
-    use ordered_float::OrderedFloat;
     use serde_json::{json, Result, Value};
     use std::cmp::Ordering;
     use std::collections::{BTreeMap, HashMap};
@@ -1175,42 +1175,42 @@ mod test {
                     });
 
                 // 2nd pass is to add analyses
-                for result in new_results.iter_mut() {
-                    let analyses: Vec<_> = results
-                        .iter()
-                        .filter(|orig| result.node_bindings == orig.node_bindings)
-                        .flat_map(|r| r.analyses.clone())
-                        .collect();
-
-                    let asdf = analyses.into_iter().map(|a| ((a.resource_id.clone(), OrderedFloat(a.score.unwrap())), a)).into_group_map();
-
-                    for ((resource_id, score), v) in asdf.into_iter() {
-                        match v.len() {
-                            1 => {
-                                result.analyses.extend(v);
-                            }
-                            _ => {
-                                let edge_binding_map = v
-                                    .iter()
-                                    .flat_map(|a| {
-                                        a.edge_bindings
-                                            .iter()
-                                            .flat_map(|(eb_key, eb_value)| eb_value.iter().map(|eb| (eb_key.clone(), eb.clone())).collect::<Vec<_>>())
-                                            .collect::<Vec<_>>()
-                                    })
-                                    .into_group_map();
-
-                                if let Some(analysis) = v.iter().next() {
-                                    let mut a = analysis.clone();
-                                    a.edge_bindings = edge_binding_map.into_iter().map(|(k, v)| (k, v.into_iter().collect())).collect();
-                                    result.analyses.push(a);
-                                }
-                            }
-                        }
-                    }
-
-                    // println!("{:?}", asdf);
-                }
+                // for result in new_results.iter_mut() {
+                //     let analyses: Vec<_> = results
+                //         .iter()
+                //         .filter(|orig| result.node_bindings == orig.node_bindings)
+                //         .flat_map(|r| r.analyses.clone())
+                //         .collect();
+                //
+                //     let asdf = analyses.into_iter().map(|a| ((a.resource_id.clone(), OrderedFloat(a.score.unwrap())), a)).into_group_map();
+                //
+                //     for ((resource_id, score), v) in asdf.into_iter() {
+                //         match v.len() {
+                //             1 => {
+                //                 result.analyses.extend(v);
+                //             }
+                //             _ => {
+                //                 let edge_binding_map = v
+                //                     .iter()
+                //                     .flat_map(|a| {
+                //                         a.edge_bindings
+                //                             .iter()
+                //                             .flat_map(|(eb_key, eb_value)| eb_value.iter().map(|eb| (eb_key.clone(), eb.clone())).collect::<Vec<_>>())
+                //                             .collect::<Vec<_>>()
+                //                     })
+                //                     .into_group_map();
+                //
+                //                 if let Some(analysis) = v.iter().next() {
+                //                     let mut a = analysis.clone();
+                //                     a.edge_bindings = edge_binding_map.into_iter().map(|(k, v)| (k, v.into_iter().collect())).collect();
+                //                     result.analyses.push(a);
+                //                 }
+                //             }
+                //         }
+                //     }
+                //
+                //     // println!("{:?}", asdf);
+                // }
             }
             response.message.results = Some(new_results);
 
