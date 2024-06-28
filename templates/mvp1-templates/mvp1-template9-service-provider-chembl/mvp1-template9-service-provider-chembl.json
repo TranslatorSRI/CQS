@@ -61,6 +61,10 @@
         "resource_id": "infores:service-provider-trapi",
         "resource_role": "supporting_data_source"
       }
+    ],
+    "attribute_type_ids": [
+      "biolink:publications",
+      "biolink:max_research_phase"
     ]
   }
 }

@@ -90,6 +90,10 @@
         "resource_id": "infores:cqs",
         "resource_role": "primary_knowledge_source"
       }
+    ],
+    "attribute_type_ids": [
+      "biolink:publications",
+      "biolink:max_research_phase"
     ]
   }
 }

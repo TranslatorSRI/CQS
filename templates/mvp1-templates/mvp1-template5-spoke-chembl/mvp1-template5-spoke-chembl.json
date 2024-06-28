@@ -66,6 +66,10 @@
         "resource_id": "infores:spoke",
         "resource_role": "supporting_data_source"
       }
+    ],
+    "attribute_type_ids": [
+      "biolink:publications",
+      "biolink:max_research_phase"
     ]
   }
 }
