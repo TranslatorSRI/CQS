@@ -1,5 +1,5 @@
 use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue, JobStatus, QueryTemplate};
-use crate::{job_actions, template, util, REQWEST_CLIENT, WHITELISTED_TEMPLATE_QUERIES};
+use crate::{job_actions, template, util, CQS_INFORES, REQWEST_CLIENT, WHITELISTED_TEMPLATE_QUERIES};
 use chrono::Utc;
 use futures::future::join_all;
 use itertools::Itertools;
@@ -9,7 +9,10 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 use std::{env, fs};
-use trapi_model_rs::{Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, Edge, EdgeBinding, KnowledgeType, Message, NodeBinding, ResourceRoleEnum, Response};
+use trapi_model_rs::{
+    AgentType, Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, Edge, EdgeBinding, KnowledgeLevelType, KnowledgeType, Message, NodeBinding, ResourceRoleEnum,
+    Response,
+};
 
 #[allow(dead_code)]
 pub fn build_node_binding_to_log_odds_data_map(message: Message) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
@@ -153,7 +156,7 @@ pub fn add_composite_score_attributes(
                                         let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
                                         let mut edge_binding_map = BTreeMap::new();
                                         edge_binding_map.insert(qg_key.clone(), kg_edge_keys);
-                                        let mut analysis = Analysis::new("infores:cqs".into(), edge_binding_map);
+                                        let mut analysis = Analysis::new(CQS_INFORES.clone(), edge_binding_map);
                                         analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
                                         analysis.score = Some(cqs_query.compute_score(entry_values.clone()));
                                         debug!("analysis: {:?}", analysis);
@@ -165,7 +168,7 @@ pub fn add_composite_score_attributes(
 
                                         if let Some((_entry_key, entry_values)) = entry {
                                             let kg_edge_keys: Vec<_> = entry_values.iter().map(|ev| EdgeBinding::new(ev.knowledge_graph_key.clone())).collect();
-                                            let mut analysis = Analysis::new("infores:cqs".into(), BTreeMap::from([(qg_key.clone(), kg_edge_keys)]));
+                                            let mut analysis = Analysis::new(CQS_INFORES.clone(), BTreeMap::from([(qg_key.clone(), kg_edge_keys)]));
                                             analysis.scoring_method = Some("weighted average of log_odds_ratio".into());
                                             analysis.score = Some(cqs_query.compute_score(entry_values.clone()));
                                             debug!("analysis: {:?}", analysis);
@@ -281,7 +284,24 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn template:
                             first_disease_node_id.id.clone(),
                             query_template.cqs.edge_sources.clone(),
                         );
-                        new_edge.attributes = Some(vec![Attribute::new("biolink:support_graphs".to_string(), serde_json::Value::from(auxiliary_graph_ids))]);
+
+                        let support_graphs_attribute = Attribute::new("biolink:support_graphs".to_string(), serde_json::Value::from(auxiliary_graph_ids));
+
+                        let mut agent_type_attribute = Attribute::new(
+                            "biolink:agent_type".to_string(),
+                            serde_json::Value::from(serde_json::to_string(&AgentType::ComputationalModel).unwrap()),
+                        );
+                        agent_type_attribute.original_attribute_name = Some("biolink:agent_type".to_string());
+                        agent_type_attribute.attribute_source = Some(CQS_INFORES.clone());
+
+                        let mut knowledge_level_attribute = Attribute::new(
+                            "biolink:knowledge_level".to_string(),
+                            serde_json::Value::from(serde_json::to_string(&KnowledgeLevelType::Prediction).unwrap()),
+                        );
+                        knowledge_level_attribute.original_attribute_name = Some("biolink:knowledge_level".to_string());
+                        knowledge_level_attribute.attribute_source = Some(CQS_INFORES.clone());
+
+                        new_edge.attributes = Some(vec![support_graphs_attribute, agent_type_attribute, knowledge_level_attribute]);
                         // println!("new_edge: {:?}", new_edge);
                         if let Some(kg) = &mut response.message.knowledge_graph {
                             let new_kg_edge_id = uuid::Uuid::new_v4().to_string();
