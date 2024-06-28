@@ -9,12 +9,40 @@ use rocket_okapi::okapi::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::io::Write;
+use strum_macros;
 use trapi_model_rs::{AttributeConstraint, Query, RetrievalSource};
+
+#[allow(dead_code)]
+#[derive(Eq, PartialEq, strum_macros::Display)]
+#[strum(serialize_all = "snake_case")]
+pub enum AgentType {
+    ManualAgent,
+    AutomatedAgent,
+    DataAnalysisPipeline,
+    ComputationalModel,
+    TextMiningAgent,
+    ImageProcessingAgent,
+    ManualValidationOfAutomatedAgent,
+    NotProvided,
+}
+
+#[allow(dead_code)]
+#[derive(Eq, PartialEq, strum_macros::Display)]
+#[strum(serialize_all = "snake_case")]
+pub enum KnowledgeLevelType {
+    KnowledgeAssertion,
+    LogicalEntailment,
+    Prediction,
+    StatisticalAssociation,
+    Observation,
+    NotProvided,
+}
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct CQS {
     pub scoring_function: Option<String>,
     pub results_limit: Option<usize>,
+    pub attribute_type_ids: Option<Vec<String>>,
     pub edge_sources: Vec<RetrievalSource>,
 }
 
