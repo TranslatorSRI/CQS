@@ -59,6 +59,14 @@
     "results_limit": 50,
     "edge_sources": [
       {
+        "resource_id": "infores:cqs",
+        "resource_role": "primary_knowledge_source"
+      },
+      {
+        "resource_id": "infores:spoke",
+        "resource_role": "supporting_knowledge_source"
+      },
+      {
         "resource_id": "infores:spoke",
         "resource_role": "primary_knowledge_source"
       },
