@@ -1,4 +1,4 @@
-use crate::model::{CQSCompositeScoreKey, CQSCompositeScoreValue, JobStatus, QueryTemplate};
+use crate::model::{AgentType, CQSCompositeScoreKey, CQSCompositeScoreValue, JobStatus, KnowledgeLevelType, QueryTemplate};
 use crate::{job_actions, template, util, CQS_INFORES, REQWEST_CLIENT, WHITELISTED_TEMPLATE_QUERIES};
 use chrono::Utc;
 use futures::future::join_all;
@@ -9,10 +9,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 use std::{env, fs};
-use trapi_model_rs::{
-    AgentType, Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, Edge, EdgeBinding, KnowledgeLevelType, KnowledgeType, Message, NodeBinding, ResourceRoleEnum,
-    Response,
-};
+use trapi_model_rs::{Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, Edge, EdgeBinding, KnowledgeType, Message, NodeBinding, ResourceRoleEnum, Response};
 
 #[allow(dead_code)]
 pub fn build_node_binding_to_log_odds_data_map(message: Message) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
@@ -287,21 +284,35 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn template:
 
                         let support_graphs_attribute = Attribute::new("biolink:support_graphs".to_string(), serde_json::Value::from(auxiliary_graph_ids));
 
-                        let mut agent_type_attribute = Attribute::new(
-                            "biolink:agent_type".to_string(),
-                            serde_json::Value::from(serde_json::to_string(&AgentType::ComputationalModel).unwrap()),
-                        );
+                        let mut agent_type_attribute = Attribute::new("biolink:agent_type".to_string(), serde_json::Value::from(AgentType::ComputationalModel.to_string()));
                         agent_type_attribute.original_attribute_name = Some("biolink:agent_type".to_string());
                         agent_type_attribute.attribute_source = Some(CQS_INFORES.clone());
 
-                        let mut knowledge_level_attribute = Attribute::new(
-                            "biolink:knowledge_level".to_string(),
-                            serde_json::Value::from(serde_json::to_string(&KnowledgeLevelType::Prediction).unwrap()),
-                        );
+                        let mut knowledge_level_attribute =
+                            Attribute::new("biolink:knowledge_level".to_string(), serde_json::Value::from(KnowledgeLevelType::Prediction.to_string()));
                         knowledge_level_attribute.original_attribute_name = Some("biolink:knowledge_level".to_string());
                         knowledge_level_attribute.attribute_source = Some(CQS_INFORES.clone());
 
-                        new_edge.attributes = Some(vec![support_graphs_attribute, agent_type_attribute, knowledge_level_attribute]);
+                        let mut new_edge_attributes = vec![support_graphs_attribute, agent_type_attribute, knowledge_level_attribute];
+
+                        if let Some(attribute_type_ids) = &query_template.cqs.attribute_type_ids {
+                            if let Some(kg) = &mut response.message.knowledge_graph {
+                                if let Some((_edge_key, edge_value)) = kg.edges.iter().find(|(_k, v)| v.object == first_disease_node_id.id && v.subject == first_drug_node_id.id) {
+                                    if let Some(edge_attributes) = &edge_value.attributes {
+                                        let edge_attributes_to_copy: Vec<Attribute> = edge_attributes
+                                            .iter()
+                                            .filter_map(|a| match attribute_type_ids.contains(&a.attribute_type_id) {
+                                                true => Some(a.clone()),
+                                                false => None,
+                                            })
+                                            .collect();
+                                        new_edge_attributes.extend(edge_attributes_to_copy);
+                                    }
+                                }
+                            }
+                        }
+
+                        new_edge.attributes = Some(new_edge_attributes);
                         // println!("new_edge: {:?}", new_edge);
                         if let Some(kg) = &mut response.message.knowledge_graph {
                             let new_kg_edge_id = uuid::Uuid::new_v4().to_string();
