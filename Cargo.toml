@@ -31,6 +31,8 @@ serde = { version = "^1.0", features = ["derive", "serde_derive"] }
 serde_derive = "^1.0"
 serde_json = "^1.0"
 serde_with = { version = "^3.1", features = ["std", "macros", "json"] }
+strum = "^0.26"
 tokio = { version = "1.28.2", features = ["full"] }
 trapi-model-rs = { git = "https://github.com/jdr0887/trapi-model-rs.git" }
 uuid = { version = "^1.4", features = ["v4"] }
+strum_macros = "0.26.4"
