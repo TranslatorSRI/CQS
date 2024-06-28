@@ -77,6 +77,7 @@ lazy_static! {
             Err(e) => panic!("Could not create Reqwest Client: {}", e),
         }
     });
+    pub static ref CQS_INFORES: String = "infores:cqs".to_string();
 }
 
 #[openapi]
