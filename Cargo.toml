@@ -23,9 +23,15 @@ itertools = "^0.13"
 lazy_static = "^1.4"
 log = { version = "^0.4", features = ["std"] }
 merge-hashmap = { version = "^0.1", features = ["default", "merge_derive-hashmap"] }
+opentelemetry = "^0.23"
+opentelemetry_sdk = { version = "^0.23", features = ["rt-tokio"] }
+opentelemetry-stdout = { version = "^0.4", features = ["trace"] }
+#opentelemetry-otlp = { version = "^0.16", features = ["tonic"] }
+#opentelemetry-jaeger = { version = "^0.22", features = [] }
+#opentelemetry-semantic-conventions = "^0.15"
 regex = "^1.10"
 reqwest = { version = "^0.12", features = ["default", "json"] }
-rocket = { version = "^0.5.0", features = ["json", "http2"] }
+rocket = { version = "0.5.0", features = ["json", "http2"] }
 rocket_okapi = { version = "0.8.0", features = ["swagger", "rapidoc"] }
 serde = { version = "^1.0", features = ["derive", "serde_derive"] }
 serde_derive = "^1.0"

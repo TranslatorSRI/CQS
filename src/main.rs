@@ -18,6 +18,11 @@ use diesel_async::AsyncPgConnection;
 use dotenvy::dotenv;
 use futures::future::join_all;
 use merge_hashmap::Merge;
+use opentelemetry::global;
+use opentelemetry::trace::{Span, SpanKind, Tracer};
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use opentelemetry_sdk::trace::TracerProvider;
+use opentelemetry_stdout::SpanExporter;
 use reqwest::header;
 use reqwest::redirect::Policy;
 use rocket::fairing::AdHoc;
@@ -170,6 +175,7 @@ async fn query(data: Json<Query>) -> Json<trapi_model_rs::Response> {
     }
 
     let mut message = query.message.clone();
+    message.results = Some(vec![]);
 
     responses.into_iter().for_each(|r| {
         message.merge(r.message);
@@ -210,13 +216,23 @@ async fn version() -> serde_json::Value {
     let app_version = env!("CARGO_PKG_VERSION");
     let maturity = env::var("MATURITY").unwrap_or("development".to_string());
     let trapi_version = env::var("TRAPI_VERSION").unwrap_or("1.4.0".to_string());
-    json!({"app_version": app_version, "trapi_version": trapi_version, "maturity": maturity})
+    let biolink_version = env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string());
+    let location = env::var("LOCATION").unwrap_or("RENCI".to_string());
+    json!({"app_version": app_version, "trapi_version": trapi_version, "maturity": maturity, "biolink_version": biolink_version, "location": location})
+}
+
+fn init_tracer() {
+    global::set_text_map_propagator(TraceContextPropagator::new());
+    let provider = TracerProvider::builder().with_simple_exporter(SpanExporter::default()).build();
+    global::set_tracer_provider(provider);
 }
 
 #[rocket::main]
 async fn main() {
     dotenv().ok();
     env_logger::init();
+    init_tracer();
+
     let launch_result = create_server().launch().await;
     match launch_result {
         Ok(_) => info!("Rocket shut down gracefully."),
@@ -248,7 +264,7 @@ pub fn create_server() -> Rocket<Build> {
                 });
             })
         }))
-        .attach(AdHoc::on_liftoff("process asyncquery jobs", |_| {
+        .attach(AdHoc::on_liftoff("process asyncquery jobs", |rocket| {
             Box::pin(async move {
                 let start = tokio::time::Instant::now() + Duration::from_secs(15);
                 tokio::task::spawn(async move {
@@ -261,6 +277,21 @@ pub fn create_server() -> Rocket<Build> {
                         }
                     }
                 });
+            })
+        }))
+        .attach(AdHoc::on_response("otel integration", |request, response| {
+            Box::pin(async move {
+                info!("{:?}", request.headers());
+                let tracer = global::tracer("infores:cqs");
+                let mut span = tracer
+                    .span_builder(format!("{} {}", request.method(), request.uri().path()))
+                    .with_kind(SpanKind::Server)
+                    .start(&tracer);
+                match response.status().code {
+                    c if (200..=299).contains(&c) => span.set_status(opentelemetry::trace::Status::Ok),
+                    c if (400..=599).contains(&c) => span.set_status(opentelemetry::trace::Status::error(response.status().to_string())),
+                    _ => unreachable!("Should never happen."),
+                }
             })
         }));
 
