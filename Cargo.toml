@@ -23,6 +23,7 @@ itertools = "^0.13"
 lazy_static = "^1.4"
 log = { version = "^0.4", features = ["std"] }
 merge-hashmap = { version = "^0.1", features = ["default", "merge_derive-hashmap"] }
+rayon = "^1.10"
 regex = "^1.10"
 reqwest = { version = "^0.12", features = ["default", "json"] }
 rocket = { version = "^0.5.0", features = ["json", "http2"] }
