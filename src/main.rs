@@ -170,6 +170,7 @@ async fn query(data: Json<Query>) -> Json<trapi_model_rs::Response> {
     }
 
     let mut message = query.message.clone();
+    message.results = Some(vec![]);
 
     responses.into_iter().for_each(|r| {
         message.merge(r.message);
@@ -177,6 +178,7 @@ async fn query(data: Json<Query>) -> Json<trapi_model_rs::Response> {
 
     util::sort_analysis_by_score(&mut message);
     util::sort_results_by_analysis_score(&mut message);
+    util::correct_analysis_resource_id(&mut message);
 
     // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
     //
@@ -252,7 +254,7 @@ pub fn create_server() -> Rocket<Build> {
             Box::pin(async move {
                 let start = tokio::time::Instant::now() + Duration::from_secs(15);
                 tokio::task::spawn(async move {
-                    let mut interval_timer = tokio::time::interval_at(start, Duration::from_secs(30));
+                    let mut interval_timer = tokio::time::interval_at(start, Duration::from_secs(15));
                     loop {
                         interval_timer.tick().await;
                         let res = timeout(Duration::from_secs(450), util::process_asyncquery_jobs()).await;
