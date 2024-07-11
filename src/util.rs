@@ -4,6 +4,7 @@ use chrono::Utc;
 use futures::future::join_all;
 use itertools::Itertools;
 use merge_hashmap::Merge;
+use rayon::prelude::*;
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
@@ -236,6 +237,18 @@ pub fn sort_results_by_analysis_score(message: &mut Message) {
                 }
             }
             return Ordering::Less;
+        });
+    }
+}
+
+pub fn correct_analysis_resource_id(message: &mut Message) {
+    if let Some(results) = &mut message.results {
+        //likely to have many results...do in parallel
+        results.par_iter_mut().for_each(|r| {
+            //not likely to have many analyses
+            r.analyses.iter_mut().for_each(|a| {
+                a.resource_id = CQS_INFORES.clone();
+            })
         });
     }
 }
@@ -535,6 +548,7 @@ pub async fn process_asyncquery_jobs() {
 
                 sort_analysis_by_score(&mut message);
                 sort_results_by_analysis_score(&mut message);
+                correct_analysis_resource_id(&mut message);
 
                 if let Some(results) = &mut message.results {
                     results.truncate(250);
