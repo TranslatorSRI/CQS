@@ -1,0 +1,25 @@
+{
+    "message": {
+        "query_graph": {
+            "nodes": {
+                "n0": {
+                    "ids": ["uuid:IdentifierFromNN"],
+                    "member_ids": ["...","...","..."],
+                    "categories": ["biolink:PhenotypicFeature"],
+                    "set_interpretation": "MANY"
+                },
+                "n1": {
+                    "categories": ["biolink:Gene"]
+                }
+            },
+            "edges": {
+                "e01": {
+                    "subject": "n0",
+                    "object": "n1",
+                    "predicates": ["biolink:genetically_associated_with"],
+                    "knowledge_type": "inferred"
+                }
+            }
+        }
+    }
+}
