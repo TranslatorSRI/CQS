@@ -43,7 +43,9 @@ app:
   log_level: "info,rocket=debug,launch=debug"
   workflow_runner_url: "https://translator-workflow-runner.renci.org"
   response_url: "http://localhost:8000"
-  wfr_output_dir: ""
+  otel_enabled: "false"
+  jaeger_host: "localhost"
+  jaeger_port: "6831"
 postgres:
   image:
     repository: "postgres"
