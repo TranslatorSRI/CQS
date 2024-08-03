@@ -23,12 +23,11 @@ itertools = "^0.13"
 lazy_static = "^1.4"
 log = { version = "^0.4", features = ["std"] }
 merge-hashmap = { version = "^0.1", features = ["default", "merge_derive-hashmap"] }
-opentelemetry = "^0.23"
-opentelemetry_sdk = { version = "^0.23", features = ["rt-tokio"] }
-opentelemetry-stdout = { version = "^0.4", features = ["trace"] }
-#opentelemetry-otlp = { version = "^0.16", features = ["tonic"] }
-#opentelemetry-jaeger = { version = "^0.22", features = [] }
-#opentelemetry-semantic-conventions = "^0.15"
+opentelemetry = "^0.24"
+opentelemetry_sdk = { version = "^0.24", features = ["rt-tokio"] }
+opentelemetry-stdout = { version = "^0.5", features = ["trace"] }
+opentelemetry-otlp = { version = "^0.17", features = ["tonic"] }
+opentelemetry-semantic-conventions = "^0.16"
 rayon = "^1.10"
 regex = "^1.10"
 reqwest = { version = "^0.12", features = ["default", "json"] }
