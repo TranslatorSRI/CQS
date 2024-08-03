@@ -13,3 +13,6 @@ data:
   POSTGRES_USER: "{{ .Values.postgres.user }}"
   POSTGRES_PASSWORD: "{{ .Values.postgres.password }}"
   POSTGRES_SERVER: "{{ .Values.postgres.server }}"
+  OTEL_ENABLED: "{{ .Values.app.otel_enabled }}"
+  JAEGER_HOST: "{{ .Values.app.jaeger_host }}"
+  JAEGER_PORT: "{{ .Values.app.jaeger_port }}"
