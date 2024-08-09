@@ -36,7 +36,7 @@
     }
   },
   "cqs": {
-    "results_limit": 50,
+    "results_limit": null,
     "edge_sources": [
       {
         "resource_id": "infores:cqs",
@@ -48,7 +48,6 @@
       }
     ],
     "attribute_type_ids": [
-      "biolink:publications",
       "biolink:max_research_phase"
     ]
   }
