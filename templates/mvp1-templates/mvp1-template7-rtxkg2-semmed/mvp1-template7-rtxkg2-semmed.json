@@ -4,7 +4,7 @@
       "id": "lookup",
       "runner_parameters": {
         "allowlist": [
-          "infores:arax"
+          "infores:rtx-kg2"
         ]
       }
     },
