@@ -158,7 +158,7 @@ async fn query(data: Json<Query>) -> Json<trapi_model_rs::Response> {
         }) {
             if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
                 if let Some(ids) = &node_value.ids {
-                    let future_responses: Vec<_> = WHITELISTED_TEMPLATE_QUERIES.iter().map(|cqs_query| util::process(cqs_query, &ids)).collect();
+                    let future_responses: Vec<_> = WHITELISTED_TEMPLATE_QUERIES.iter().map(|cqs_query| util::process(&query_graph, cqs_query, &ids)).collect();
                     let joined_future_responses = join_all(future_responses).await;
                     joined_future_responses
                         .into_iter()

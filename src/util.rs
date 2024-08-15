@@ -10,7 +10,9 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 use std::{env, fs};
-use trapi_model_rs::{Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, Edge, EdgeBinding, KnowledgeType, Message, NodeBinding, ResourceRoleEnum, Response};
+use trapi_model_rs::{
+    Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, Edge, EdgeBinding, KnowledgeType, Message, NodeBinding, QueryGraph, ResourceRoleEnum, Response,
+};
 
 #[allow(dead_code)]
 pub fn build_node_binding_to_log_odds_data_map(message: Message) -> HashMap<CQSCompositeScoreKey, Vec<CQSCompositeScoreValue>> {
@@ -253,19 +255,26 @@ pub fn correct_analysis_resource_id(message: &mut Message) {
     }
 }
 
-pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn template::CQSTemplate>, query_template: &QueryTemplate) {
+pub fn add_support_graphs(response: &mut Response, query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQSTemplate>, query_template: &QueryTemplate) {
     let mut auxiliary_graphs: BTreeMap<String, AuxiliaryGraph> = BTreeMap::new();
+
+    let query_graph_edge_entry = query_graph.edges.iter().next().expect("Could not get QG edge");
+    let query_edge = query_graph_edge_entry.1.clone();
+    let query_edge_subject_id = query_edge.subject;
+    let query_edge_object_id = query_edge.object;
 
     if let Some(results) = &mut response.message.results {
         for result in results {
             let mut new_node_bindings: BTreeMap<String, Vec<NodeBinding>> = BTreeMap::new();
 
             if let Some((_disease_node_binding_key, disease_node_binding_value)) = result.node_bindings.iter().find(|(k, _v)| **k == cqs_query.template_disease_node_id()) {
-                new_node_bindings.insert(cqs_query.inferred_disease_node_id(), disease_node_binding_value.to_vec());
+                // new_node_bindings.insert(cqs_query.inferred_disease_node_id(), disease_node_binding_value.to_vec());
+                new_node_bindings.insert(query_edge_object_id.clone(), disease_node_binding_value.to_vec());
             }
 
             if let Some((_drug_node_binding_key, drug_node_binding_value)) = result.node_bindings.iter().find(|(k, _v)| **k == cqs_query.template_drug_node_id()) {
-                new_node_bindings.insert(cqs_query.inferred_drug_node_id(), drug_node_binding_value.to_vec());
+                // new_node_bindings.insert(cqs_query.inferred_drug_node_id(), drug_node_binding_value.to_vec());
+                new_node_bindings.insert(query_edge_subject_id.clone(), drug_node_binding_value.to_vec());
             }
 
             let mut local_auxiliary_graphs: BTreeMap<String, AuxiliaryGraph> = BTreeMap::new();
@@ -281,10 +290,7 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn template:
                 local_auxiliary_graphs.insert(auxiliary_graph_id, ag);
             });
 
-            match (
-                new_node_bindings.get(&cqs_query.inferred_drug_node_id()),
-                new_node_bindings.get(&cqs_query.inferred_disease_node_id()),
-            ) {
+            match (new_node_bindings.get(&query_edge_subject_id), new_node_bindings.get(&query_edge_object_id)) {
                 (Some(drug_node_ids), Some(disease_node_ids)) => match (drug_node_ids.first(), disease_node_ids.first()) {
                     (Some(first_drug_node_id), Some(first_disease_node_id)) => {
                         let auxiliary_graph_ids: Vec<_> = local_auxiliary_graphs.clone().into_keys().collect();
@@ -335,7 +341,7 @@ pub fn add_support_graphs(response: &mut Response, cqs_query: &Box<dyn template:
                                 analysis.edge_bindings.clear();
                                 analysis
                                     .edge_bindings
-                                    .insert(cqs_query.inferred_predicate_id(), vec![EdgeBinding::new(new_kg_edge_id.clone())]);
+                                    .insert(query_graph_edge_entry.0.clone(), vec![EdgeBinding::new(new_kg_edge_id.clone())]);
                             });
                         }
                     }
@@ -376,7 +382,7 @@ pub fn compute_composite_score(entry_values: Vec<CQSCompositeScoreValue>) -> f64
     }
 }
 
-pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi_model_rs::CURIE>) -> Option<Response> {
+pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi_model_rs::CURIE>) -> Option<Response> {
     let request_client = REQWEST_CLIENT.get().await;
 
     let workflow_runner_url = format!(
@@ -465,7 +471,7 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
             }
         }
 
-        add_support_graphs(&mut tr, cqs_query, &query_template);
+        add_support_graphs(&mut tr, query_graph, cqs_query, &query_template);
 
         sort_analysis_by_score(&mut tr.message);
         sort_results_by_analysis_score(&mut tr.message);
@@ -499,7 +505,7 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
 }
 
 pub async fn process_asyncquery_jobs() {
-    info!("processing asyncquery jobs");
+    debug!("processing asyncquery jobs");
 
     if let Ok(mut undone_jobs) = job_actions::find_undone().await {
         for job in undone_jobs.iter_mut() {
@@ -524,7 +530,7 @@ pub async fn process_asyncquery_jobs() {
                 }) {
                     if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
                         if let Some(ids) = &node_value.ids {
-                            let future_responses: Vec<_> = WHITELISTED_TEMPLATE_QUERIES.iter().map(|cqs_query| util::process(cqs_query, &ids)).collect();
+                            let future_responses: Vec<_> = WHITELISTED_TEMPLATE_QUERIES.iter().map(|cqs_query| util::process(&query_graph, cqs_query, &ids)).collect();
                             let joined_future_responses = join_all(future_responses).await;
                             joined_future_responses
                                 .into_iter()
@@ -613,7 +619,7 @@ pub async fn send_callback(query: AsyncQuery, ret: Response) {
 }
 
 pub async fn delete_stale_asyncquery_jobs() {
-    info!("deleting stale asyncquery jobs");
+    debug!("deleting stale asyncquery jobs");
     // let mut connection = AsyncPgConnection::establish(&std::env::var("DATABASE_URL")?).await?;
     if let Ok(jobs) = job_actions::find_all(None).await {
         let now = Utc::now().naive_utc();
@@ -621,7 +627,7 @@ pub async fn delete_stale_asyncquery_jobs() {
             .iter()
             .filter(|j| {
                 let diff = now - j.date_submitted;
-                diff.num_seconds() > 7200
+                diff.num_seconds() > 3600
             })
             .map(|j| job_actions::delete(&j.id))
             .collect();
@@ -1117,7 +1123,12 @@ mod test {
         let mut new_results: Vec<trapi_model_rs::Result> = vec![];
         let mut auxiliary_graphs: BTreeMap<String, AuxiliaryGraph> = BTreeMap::new();
 
-        if let Some(results) = &mut response.message.results {
+        if let (Some(results), Some(query_graph)) = (&mut response.message.results, &response.message.query_graph) {
+            let query_graph_edge_entry = query_graph.edges.iter().next().expect("Could not get edge");
+            let query_edge = query_graph_edge_entry.1.clone();
+            let query_edge_subject_id = query_edge.subject;
+            let query_edge_object_id = query_edge.object;
+
             for result in results {
                 let mut new_node_bindings: BTreeMap<String, Vec<NodeBinding>> = BTreeMap::new();
 
@@ -1126,12 +1137,12 @@ mod test {
 
                 if let Some((disease_node_binding_key, disease_node_binding_value)) = result.node_bindings.iter().find(|(k, v)| **k == cqs_query.template_disease_node_id()) {
                     // println!("disease_node_binding_value: {:?}", disease_node_binding_value);
-                    new_node_bindings.insert(cqs_query.inferred_disease_node_id(), disease_node_binding_value.to_vec());
+                    new_node_bindings.insert(query_edge_subject_id.clone(), disease_node_binding_value.to_vec());
                 }
 
                 if let Some((drug_node_binding_key, drug_node_binding_value)) = result.node_bindings.iter().find(|(k, v)| **k == cqs_query.template_drug_node_id()) {
                     // println!("drug_node_binding_value: {:?}", drug_node_binding_value);
-                    new_node_bindings.insert(cqs_query.inferred_drug_node_id(), drug_node_binding_value.to_vec());
+                    new_node_bindings.insert(query_edge_object_id.clone(), drug_node_binding_value.to_vec());
                 }
 
                 // let mut new_analyses = result.analyses.clone();
@@ -1149,10 +1160,7 @@ mod test {
                     local_auxiliary_graphs.insert(auxiliary_graph_id, ag);
                 });
 
-                match (
-                    new_node_bindings.get(&cqs_query.inferred_drug_node_id()),
-                    new_node_bindings.get(&cqs_query.inferred_disease_node_id()),
-                ) {
+                match (new_node_bindings.get(&query_edge_object_id), new_node_bindings.get(&query_edge_subject_id)) {
                     (Some(drug_node_ids), Some(disease_node_ids)) => {
                         // println!("drug_node_ids: {:?}", drug_node_ids);
                         // println!("disease_node_ids: {:?}", disease_node_ids);
@@ -1177,7 +1185,7 @@ mod test {
                                         analysis.edge_bindings.clear();
                                         analysis
                                             .edge_bindings
-                                            .insert(cqs_query.inferred_predicate_id(), vec![EdgeBinding::new(new_kg_edge_id.clone())]);
+                                            .insert(query_graph_edge_entry.0.clone(), vec![EdgeBinding::new(new_kg_edge_id.clone())]);
                                     });
                                 }
                             }
