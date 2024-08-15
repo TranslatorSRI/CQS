@@ -499,7 +499,7 @@ pub async fn process(cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi
 }
 
 pub async fn process_asyncquery_jobs() {
-    info!("processing asyncquery jobs");
+    debug!("processing asyncquery jobs");
 
     if let Ok(mut undone_jobs) = job_actions::find_undone().await {
         for job in undone_jobs.iter_mut() {
@@ -613,7 +613,7 @@ pub async fn send_callback(query: AsyncQuery, ret: Response) {
 }
 
 pub async fn delete_stale_asyncquery_jobs() {
-    info!("deleting stale asyncquery jobs");
+    debug!("deleting stale asyncquery jobs");
     // let mut connection = AsyncPgConnection::establish(&std::env::var("DATABASE_URL")?).await?;
     if let Ok(jobs) = job_actions::find_all(None).await {
         let now = Utc::now().naive_utc();
@@ -621,7 +621,7 @@ pub async fn delete_stale_asyncquery_jobs() {
             .iter()
             .filter(|j| {
                 let diff = now - j.date_submitted;
-                diff.num_seconds() > 7200
+                diff.num_seconds() > 3600
             })
             .map(|j| job_actions::delete(&j.id))
             .collect();
