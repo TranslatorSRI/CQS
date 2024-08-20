@@ -586,17 +586,17 @@ pub async fn send_callback(query: AsyncQuery, ret: Response) {
     let request_client = REQWEST_CLIENT.get().await;
     // 1st attempt
     info!("1st attempt at sending response to: {}", &query.callback);
-    match request_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
+    match request_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(30)).send().await {
         Ok(first_attempt_callback_response) => {
             let first_attempt_status_code = first_attempt_callback_response.status();
             debug!("first_attempt_status_code: {}", first_attempt_status_code);
             if !first_attempt_status_code.is_success() {
                 // update_job(job, JobStatus::Failed);
                 warn!("failed to make 1st callback post");
-                tokio::time::sleep(Duration::from_secs(10)).await;
+                tokio::time::sleep(Duration::from_secs(15)).await;
                 // 2st attempt
                 info!("2nd attempt at sending response to: {}", &query.callback);
-                match request_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(10)).send().await {
+                match request_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(30)).send().await {
                     Ok(second_attempt_callback_response) => {
                         let second_attempt_status_code = second_attempt_callback_response.status();
                         debug!("second_attempt_status_code: {}", second_attempt_status_code);
