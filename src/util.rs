@@ -584,35 +584,32 @@ pub async fn process_asyncquery_jobs() {
 
 pub async fn send_callback(query: AsyncQuery, ret: Response) {
     let request_client = REQWEST_CLIENT.get().await;
-    // 1st attempt
-    info!("1st attempt at sending response to: {}", &query.callback);
-    match request_client.post(&query.callback).json(&ret).send().await {
-        Ok(first_attempt_callback_response) => {
-            let first_attempt_status_code = first_attempt_callback_response.status();
-            debug!("first_attempt_status_code: {}", first_attempt_status_code);
-            if !first_attempt_status_code.is_success() {
-                // update_job(job, JobStatus::Failed);
-                warn!("failed to make 1st callback post");
-                tokio::time::sleep(Duration::from_secs(15)).await;
-                // 2st attempt
-                info!("2nd attempt at sending response to: {}", &query.callback);
-                match request_client.post(&query.callback).json(&ret).send().await {
-                    Ok(second_attempt_callback_response) => {
-                        let second_attempt_status_code = second_attempt_callback_response.status();
-                        warn!("second_attempt_status_code: {}", second_attempt_status_code);
-                        if !second_attempt_status_code.is_success() {
-                            warn!("failed to make 2nd callback post");
-                        }
-                    }
-                    Err(e) => {
-                        warn!("2nd attempt at callback error: {}", e);
-                    }
+
+    let mut was_successful = false;
+    for attempt in 1..=2 {
+        info!("attempt #{} - sending response to: {}", attempt, &query.callback);
+        match request_client.post(&query.callback).json(&ret).timeout(Duration::from_secs(60)).send().await {
+            Ok(attempt_callback_response) => {
+                let attempt_status_code = attempt_callback_response.status();
+                info!("attempt #{} - attempt_status_code: {}", attempt, attempt_status_code);
+                if attempt_status_code.is_success() {
+                    info!("attempt #{} - successfully sent to callback", attempt);
+                    was_successful = true;
                 }
             }
+            Err(e) => {
+                warn!("attempt #{} - callback error: {}", attempt, e);
+            }
         }
-        Err(e) => {
-            warn!("1st attempt at callback error: {}", e);
+        if was_successful {
+            break;
+        } else {
+            tokio::time::sleep(Duration::from_secs(15)).await;
         }
+    }
+
+    if !was_successful {
+        warn!("failed to send response to callback url");
     }
 }
 
