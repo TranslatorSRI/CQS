@@ -2,11 +2,28 @@
   "message": {
     "query_graph": {
       "nodes": {
-        "n0": {"categories": ["biolink:ChemicalEntity"]},
-        "n1": {"ids": ["MONDO:0009061", "MONDO:0004979", "MONDO:0007088"]}
+        "n0": {
+          "categories": [
+            "biolink:ChemicalEntity"
+          ]
+        },
+        "n1": {
+          "ids": [
+            "MONDO:0009061",
+            "MONDO:0004979",
+            "MONDO:0007088"
+          ]
+        }
       },
       "edges": {
-        "e0": {"subject": "n0", "object": "n1", "predicates": ["biolink:treats"], "knowledge_type": "inferred"}
+        "e0": {
+          "subject": "n0",
+          "object": "n1",
+          "predicates": [
+            "biolink:treats"
+          ],
+          "knowledge_type": "inferred"
+        }
       }
     }
   }
