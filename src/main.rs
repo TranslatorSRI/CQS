@@ -67,7 +67,7 @@ lazy_static! {
         headers.insert(header::ACCEPT, header::HeaderValue::from_static("application/json"));
         headers.insert(header::CONTENT_TYPE, header::HeaderValue::from_static("application/json"));
         let result = reqwest::Client::builder()
-            .redirect(Policy::limited(3))
+            .redirect(Policy::limited(5))
             .timeout(Duration::from_secs(900))
             .default_headers(headers)
             .build();
