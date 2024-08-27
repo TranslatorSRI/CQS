@@ -23,14 +23,10 @@
           ],
           "attribute_constraints": [
             {
-              "id": "biolink:max_research_phase",
-              "name": "clinical-trials-phase",
+              "id": "elevate_to_prediction",
+              "name": "boolean_make_prediction_constraint",
               "operator": "==",
-              "value": [
-                "clinical_trial_phase_1",
-                "clinical_trial_phase_2",
-                "clinical_trial_phase_3"
-              ]
+              "value": "True"
             }
           ]
         }
