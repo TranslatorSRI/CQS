@@ -122,3 +122,10 @@ impl_wrapper!(
     "n1", //template_disease_node_id
     util::compute_composite_score
 );
+impl_wrapper!(
+    MultiomicsCTKP,
+    "mvp-template11-multiomics-ctkp/mvp1-template11-multiomics-ctkp.json",
+    "n00", //template_drug_node_id
+    "n01", //template_disease_node_id
+    util::compute_composite_score
+);
