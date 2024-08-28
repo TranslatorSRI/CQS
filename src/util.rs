@@ -583,6 +583,7 @@ pub async fn process_asyncquery_jobs() {
 }
 
 pub async fn send_callback(query: AsyncQuery, ret: Response) {
+    info!("ENTERING send_callback(AsyncQuery, Response)");
     let request_client = REQWEST_CLIENT.get().await;
 
     let mut was_successful = false;
