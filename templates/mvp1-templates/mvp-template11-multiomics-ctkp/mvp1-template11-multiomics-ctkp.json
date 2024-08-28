@@ -1,0 +1,65 @@
+{
+  "workflow": [
+    {
+      "id": "lookup",
+      "runner_parameters": {
+        "allowlist": [
+          "infores:multiomics-clinicaltrials"
+        ]
+      }
+    },
+    {
+      "id": "score"
+    }
+  ],
+  "message": {
+    "query_graph": {
+      "edges": {
+        "e00": {
+          "subject": "n00",
+          "object": "n01",
+          "predicates": [
+            "biolink:in_clinical_trials_for"
+          ],
+          "attribute_constraints": [
+            {
+              "id": "elevate_to_prediction",
+              "name": "boolean_make_prediction_constraint",
+              "operator": "==",
+              "value": "True"
+            }
+          ]
+        }
+      },
+      "nodes": {
+        "n00": {
+          "categories": [
+            "biolink:ChemicalEntity"
+          ]
+        },
+        "n01": {
+          "categories": [
+            "biolink:DiseaseOrPhenotypicFeature"
+          ],
+          "ids": []
+        }
+      }
+    }
+  },
+  "cqs": {
+    "results_limit": null,
+    "edge_sources": [
+      {
+        "resource_id": "infores:cqs",
+        "resource_role": "primary_knowledge_source"
+      },
+      {
+        "resource_id": "infores:multiomics-clinicaltrials",
+        "resource_role": "supporting_data_source"
+      }
+    ],
+    "attribute_type_ids": [
+      "biolink:max_research_phase"
+    ]
+  }
+}
