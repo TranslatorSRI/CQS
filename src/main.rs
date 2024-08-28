@@ -52,6 +52,7 @@ lazy_static! {
         Box::new(template::ServiceProviderSemMed::new()),
         Box::new(template::ServiceProviderChembl::new()),
         Box::new(template::ServiceProviderTMKPTargeted::new()),
+        Box::new(template::MultiomicsCTKP::new()),
     ];
     pub static ref DB_POOL: AsyncOnce<bb8::Pool<AsyncDieselConnectionManager<AsyncPgConnection>>> = AsyncOnce::new(async {
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
