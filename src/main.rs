@@ -83,6 +83,7 @@ lazy_static! {
 #[openapi]
 #[post("/asyncquery", data = "<data>")]
 async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, status::Custom<Json<AsyncQuery>>> {
+    info!("ENTERING asyncquery(Json<AsyncQuery>)");
     let query: AsyncQuery = data.clone().into_inner();
 
     if let Some(query_graph) = &query.message.query_graph {
@@ -98,6 +99,7 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
             let job_id = job_actions::insert(&job).await.expect("did not insert");
             let mut ret = AsyncQueryResponse::new(job_id.to_string());
             ret.status = Some(JobStatus::Queued.to_string());
+            info!("LEAVING asyncquery(Json<AsyncQuery>) - OK");
             return Ok(Json(ret));
         } else {
             let mut message = query.message.clone();
@@ -110,9 +112,11 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
             res.schema_version = Some(env::var("TRAPI_VERSION").unwrap_or("1.4.0".to_string()));
 
             send_callback(query, res).await;
+            warn!("returning: {:?}", status::Custom(rocket::http::Status::Ok, data.clone()));
             return Err(status::Custom(rocket::http::Status::Ok, data.clone()));
         }
     }
+    warn!("returning: {:?}", status::Custom(rocket::http::Status::Ok, data.clone()));
     Err(status::Custom(rocket::http::Status::Ok, data.clone()))
 }
 
