@@ -16,11 +16,11 @@ The CQS was conceptualized by the Translator Clinical Data Committee, but initia
 4. Test the CQS template by direct query of the Workflow Runner.
 5. Create a branch in the CQS repo.
    - Create a new template folder within CQS/templates. Following the nomenclature specified below.
-   - Within that folder, add a thoroughly descriptive README with a POC and select CURIES to be used for development and testing. The CURIES should be associated with test assets that the POC has contributed to the test assets repo, using [this G-sheet](https://docs.google.com/spreadsheets/d/1wAQaFEtFqAvp2fbTZIe-2ObF9zUU_cmXILfU8SzUWe0/edit?usp=drive_link).
+   - Within that folder, add a thoroughly descriptive README with a POC and select CURIES to be used for development and testing. The CURIES should be associated with test assets that the POC has contributed to the test assets repo: https://github.com/NCATSTranslator/Tests.
    - Add a new CQS template structured as a valid TRAPI.
    - Create a PR.
 5. The new CQS template will then be deployed to DEV, thus entering the Translator pipeline.
-6. After the CQS is deployed to CI, it will be picked up by the Information Radiator for automated testing. The POC for a given CQS template is responsible for monitoring the testing results.
+6. After the CQS is deployed to CI, it will be picked up by the Information Radiator for automated testing. **The POC for a given CQS template is responsible for monitoring the testing results.**
 
 *See https://github.com/NCATSTranslator/OperationsAndWorkflows/tree/main/schema for valid TRAPI operations and workflows.*
 
