@@ -21,9 +21,9 @@ Path A was developed by the TCDC in support of MVP1 (_what drugs may treat disea
 
 ### Overall Structure
 
-Path A serves as a CQS template and is structured as a valid TRAPI query, with workflow parameters and an _allowlist_ parameter. 
+mvp1-template1-clinical-kps (formerly known as Path A) serves as a CQS template and is structured as a valid TRAPI query, with workflow parameters and an _allowlist_ parameter. 
 
-Note that Path A targets the clinical KPs, using the following predicates plus an _allowlist_ parameter:
+Path A targets the clinical KPs, using the following predicates plus an _allowlist_ parameter. Note that the associated_with predicate and the correlated_with predicate are _not_ specific to the Clinical KPs, so the presence of those edges alone cannot be used to validate that the Clinical KPs have returned edges to a given query. Rather, one should search for infores identifiers.
 
     associated_with
     
