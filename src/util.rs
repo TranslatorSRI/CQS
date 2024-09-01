@@ -5,6 +5,7 @@ use futures::future::join_all;
 use itertools::Itertools;
 use merge_hashmap::Merge;
 use rayon::prelude::*;
+use rocket::form::validate::Contains;
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
@@ -444,7 +445,47 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
                 std::path::Path::join(parent_dir, format!("{}-{}-pre.json", cqs_query.name(), uuid).as_str()),
                 serde_json::to_string_pretty(&tr).unwrap(),
             )
-                .expect("failed to write output");
+            .expect("failed to write output");
+        }
+
+        if let Some(blm_predicate_filter) = &query_template.cqs.biolink_model_predicate_filter {
+            if let (Some(blacklist), Some(kg)) = (blm_predicate_filter.blacklist.clone(), &mut tr.message.knowledge_graph) {
+                let edge_keys_to_remove = kg.edges.iter().filter(|(_k, v)| blacklist.contains(&v.predicate)).map(|(k, _v)| k.clone()).collect_vec();
+                info!("{}, removing biolink model edges via blacklist: {:?}", cqs_query.name(), edge_keys_to_remove);
+                for ek in edge_keys_to_remove.iter() {
+                    kg.edges.remove(ek);
+                }
+            }
+
+            if let Some(filter_descendants) = blm_predicate_filter.filter_descendants {
+                if filter_descendants {
+                    let blm_lookup_server = env::var("BIOLINK_MODEL_LOOKUP_SERVER").unwrap_or("https://bl-lookup-sri.renci.org".to_string());
+                    let blm_version = env::var("BIOLINK_VERSION").unwrap_or("4.2.2".to_string());
+
+                    let qedge = query_template.message.query_graph.clone()?.edges.iter().next()?.1.clone();
+                    let predicates = qedge.predicates?;
+                    let predicate = predicates.iter().next()?;
+
+                    let blm_lookup_url = format!("{}/bl/{}/descendants?version=v{}", blm_lookup_server, urlencoding::encode(predicate), blm_version);
+                    info!("blm_lookup_url: {}", blm_lookup_url);
+                    let blm_lookup_response_result = request_client.get(blm_lookup_url).send().await;
+                    if let Ok(response) = blm_lookup_response_result {
+                        // let asdf = response.json().await;
+                        if let (Ok(blacklist), Some(kg)) = (&mut response.json::<Vec<String>>().await, &mut tr.message.knowledge_graph) {
+                            blacklist.remove(0);
+                            let edge_keys_to_remove = kg.edges.iter().filter(|(_k, v)| blacklist.contains(&v.predicate)).map(|(k, _v)| k.clone()).collect_vec();
+                            info!(
+                                "{}, removing biolink model edges via blm lookup of descendants: {:?}",
+                                cqs_query.name(),
+                                edge_keys_to_remove
+                            );
+                            for ek in edge_keys_to_remove.iter() {
+                                kg.edges.remove(ek);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if let (Some(ac), Some(kg)) = (attribute_constraint, &mut tr.message.knowledge_graph) {
@@ -491,7 +532,7 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
                 std::path::Path::join(parent_dir, format!("{}-{}-post.json", cqs_query.name(), uuid).as_str()),
                 serde_json::to_string_pretty(&tr).unwrap(),
             )
-                .expect("failed to write output");
+            .expect("failed to write output");
         }
 
         Some(tr)
@@ -865,7 +906,7 @@ mod test {
               ]
             }
         }))
-            .unwrap();
+        .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), vec!["1.0", "2.0"].into());
         let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
@@ -905,7 +946,7 @@ mod test {
               ]
             }
         }))
-            .unwrap();
+        .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), "qwer".into());
         let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
@@ -940,7 +981,7 @@ mod test {
               ]
             }
         }))
-            .unwrap();
+        .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), 100.into());
         let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
@@ -975,7 +1016,7 @@ mod test {
               ]
             }
         }))
-            .unwrap();
+        .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), ">".to_string(), 20.into());
         let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
@@ -1010,7 +1051,7 @@ mod test {
               ]
             }
         }))
-            .unwrap();
+        .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "<".to_string(), 200.into());
         let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
@@ -1045,7 +1086,7 @@ mod test {
               ]
             }
         }))
-            .unwrap();
+        .unwrap();
 
         let ac = AttributeConstraint::new("biolink:asdf".to_string(), "asdf".to_string(), "matches".to_string(), "^.+asdf.+$".into());
         let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);

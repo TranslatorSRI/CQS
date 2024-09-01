@@ -44,6 +44,13 @@ pub struct CQS {
     pub results_limit: Option<usize>,
     pub attribute_type_ids: Option<Vec<String>>,
     pub edge_sources: Vec<RetrievalSource>,
+    pub biolink_model_predicate_filter: Option<BiolinkModelPredicateFilter>,
+}
+
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+pub struct BiolinkModelPredicateFilter {
+    pub blacklist: Option<Vec<String>>,
+    pub filter_descendants: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]

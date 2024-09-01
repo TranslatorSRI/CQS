@@ -37,6 +37,14 @@
   },
   "cqs": {
     "results_limit": null,
+    "biolink_model_predicate_filter": {
+      "blacklist": [
+        "biolink:beneficial_in_models_for",
+        "biolink:applied_to_treat",
+        "biolink:ameliorates_condition",
+        "biolink:preventative_for_condition"
+      ]
+    },
     "edge_sources": [
       {
         "resource_id": "infores:cqs",

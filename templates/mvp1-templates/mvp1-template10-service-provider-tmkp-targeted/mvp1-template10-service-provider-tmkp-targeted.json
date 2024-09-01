@@ -48,6 +48,9 @@
   },
   "cqs": {
     "results_limit": null,
+    "biolink_model_predicate_filter": {
+      "filter_descendants": true
+    },
     "edge_sources": [
       {
         "resource_id": "infores:cqs",
