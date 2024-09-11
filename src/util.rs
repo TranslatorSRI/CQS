@@ -444,7 +444,7 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
                 std::path::Path::join(parent_dir, format!("{}-{}-pre.json", cqs_query.name(), uuid).as_str()),
                 serde_json::to_string_pretty(&tr).unwrap(),
             )
-                .expect("failed to write output");
+            .expect("failed to write output");
         }
 
         if let (Some(ac), Some(kg)) = (attribute_constraint, &mut tr.message.knowledge_graph) {
@@ -491,7 +491,7 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
                 std::path::Path::join(parent_dir, format!("{}-{}-post.json", cqs_query.name(), uuid).as_str()),
                 serde_json::to_string_pretty(&tr).unwrap(),
             )
-                .expect("failed to write output");
+            .expect("failed to write output");
         }
 
         Some(tr)
@@ -569,7 +569,7 @@ pub async fn process_asyncquery_jobs() {
                 res.biolink_version = Some(env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string()));
                 res.schema_version = Some(env::var("TRAPI_VERSION").unwrap_or("1.4.0".to_string()));
 
-                job.response = Some(serde_json::to_string(&res).unwrap().into_bytes());
+                job.response = Some(serde_json::to_vec(&res).unwrap());
                 job.date_finished = Some(Utc::now().naive_utc());
                 job.status = JobStatus::Completed;
                 job_actions::update(job).await;
@@ -865,7 +865,7 @@ mod test {
               ]
             }
         }))
-            .unwrap();
+        .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), vec!["1.0", "2.0"].into());
         let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
@@ -905,7 +905,7 @@ mod test {
               ]
             }
         }))
-            .unwrap();
+        .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), "qwer".into());
         let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
@@ -940,7 +940,7 @@ mod test {
               ]
             }
         }))
-            .unwrap();
+        .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "==".to_string(), 100.into());
         let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
@@ -975,7 +975,7 @@ mod test {
               ]
             }
         }))
-            .unwrap();
+        .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), ">".to_string(), 20.into());
         let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
@@ -1010,7 +1010,7 @@ mod test {
               ]
             }
         }))
-            .unwrap();
+        .unwrap();
 
         let ac = AttributeConstraint::new("biolink:evidence_count".to_string(), "asdf".to_string(), "<".to_string(), 200.into());
         let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
@@ -1045,7 +1045,7 @@ mod test {
               ]
             }
         }))
-            .unwrap();
+        .unwrap();
 
         let ac = AttributeConstraint::new("biolink:asdf".to_string(), "asdf".to_string(), "matches".to_string(), "^.+asdf.+$".into());
         let edge_keys_to_remove = find_edge_keys_to_remove(ac, &mut edge_map);
