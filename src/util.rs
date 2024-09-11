@@ -409,9 +409,9 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
         let wfr_response: Option<Response> = match wfr_response_result {
             Ok(response) => {
                 info!("WFR response.status(): {} for query {} ", response.status(), cqs_query.name());
-                let result_data = response.text().await;
+                let result_data = response.json::<trapi_model_rs::Response>().await;
                 match result_data {
-                    Ok(data) => Some(serde_json::from_str(data.as_str()).expect("could not parse Query")),
+                    Ok(data) => Some(data),
                     Err(e) => {
                         warn!("Error reading response from WFR: {}", e);
                         None
@@ -435,17 +435,8 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
 
     if let Some(mut tr) = trapi_response {
         let uuid = uuid::Uuid::new_v4().to_string();
-        if let Ok(wfr_output_dir) = env::var("WFR_OUTPUT_DIR") {
-            let parent_dir = std::path::Path::new(&wfr_output_dir);
-            if !parent_dir.exists() {
-                fs::create_dir_all(parent_dir).expect(format!("Could not create directory: {:?}", parent_dir).as_str());
-            }
-            fs::write(
-                std::path::Path::join(parent_dir, format!("{}-{}-pre.json", cqs_query.name(), uuid).as_str()),
-                serde_json::to_string_pretty(&tr).unwrap(),
-            )
-            .expect("failed to write output");
-        }
+        // intended for debugging...writes
+        write_wfr_response("pre", &tr, &uuid, &cqs_query.name());
 
         if let (Some(ac), Some(kg)) = (attribute_constraint, &mut tr.message.knowledge_graph) {
             let edge_keys_to_remove = find_edge_keys_to_remove(ac.clone(), &kg.edges);
@@ -482,17 +473,7 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
             }
         }
 
-        if let Ok(wfr_output_dir) = env::var("WFR_OUTPUT_DIR") {
-            let parent_dir = std::path::Path::new(&wfr_output_dir);
-            if !parent_dir.exists() {
-                fs::create_dir_all(parent_dir).expect(format!("Could not create directory: {:?}", parent_dir).as_str());
-            }
-            fs::write(
-                std::path::Path::join(parent_dir, format!("{}-{}-post.json", cqs_query.name(), uuid).as_str()),
-                serde_json::to_string_pretty(&tr).unwrap(),
-            )
-            .expect("failed to write output");
-        }
+        write_wfr_response("post", &tr, &uuid, &cqs_query.name());
 
         Some(tr)
     } else {
@@ -504,6 +485,18 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
     // Some(trapi_response)
 }
 
+/// Writes TRAPI Response to disk if WFR_OUTPUT_DIR env var is set & exists
+fn write_wfr_response(suffix: &str, trapi_response: &Response, uuid: &str, cqs_query_name: &str) {
+    if let Ok(wfr_output_dir) = env::var("WFR_OUTPUT_DIR") {
+        let parent_dir = std::path::Path::new(&wfr_output_dir);
+        if parent_dir.exists() {
+            let output_path = std::path::Path::join(parent_dir, format!("{}-{}-{}.json", cqs_query_name, uuid, suffix).as_str());
+            fs::write(output_path, serde_json::to_string_pretty(&trapi_response).unwrap()).expect("Could not write WFR output");
+        }
+    }
+}
+
+/// pulls undone jobs from a db & begins processing asynchronous submissions
 pub async fn process_asyncquery_jobs() {
     debug!("processing asyncquery jobs");
 
