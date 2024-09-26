@@ -549,9 +549,9 @@ pub async fn process_asyncquery_jobs() {
                 sort_results_by_analysis_score(&mut message);
                 correct_analysis_resource_id(&mut message);
 
-                // if let Some(results) = &mut message.results {
-                //     results.truncate(250);
-                // }
+                if let Some(results) = &mut message.results {
+                    results.truncate(500);
+                }
 
                 // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
                 // let message_with_score_attributes = util::add_composite_score_attributes(message, node_binding_to_log_odds_map);
