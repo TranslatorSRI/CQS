@@ -143,7 +143,7 @@ async fn asyncquery_status(job_id: i32) -> Result<Json<AsyncQueryStatusResponse>
             return Ok(Json(status_response));
         }
     }
-    return Err(status::BadRequest("Job not found".to_string()));
+    Err(status::BadRequest("Job not found".to_string()))
 }
 
 #[openapi]
@@ -185,6 +185,10 @@ async fn query(data: Json<Query>) -> Json<trapi_model_rs::Response> {
     util::sort_results_by_analysis_score(&mut message);
     util::correct_analysis_resource_id(&mut message);
 
+    if let Some(results) = &mut message.results {
+        results.truncate(500);
+    }
+
     // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
     //
     // let mut ret = trapi_model_rs::Response::new(util::add_composite_score_attributes(message, node_binding_to_log_odds_map));
@@ -208,7 +212,7 @@ async fn download(job_id: i32) -> Result<Json<trapi_model_rs::Response>, status:
             }
         }
     }
-    return Err(status::BadRequest("Job not found".to_string()));
+    Err(status::BadRequest("Job not found".to_string()))
 }
 
 #[openapi]
