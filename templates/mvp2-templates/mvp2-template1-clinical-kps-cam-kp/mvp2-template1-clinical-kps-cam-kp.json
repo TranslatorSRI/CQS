@@ -42,29 +42,33 @@
             ]
           }
         },
-      "nodes": {
-        "n0": {
-          "ids": []
-        },
-        "n1": {
-          "categories": [
-            "biolink:SmallMolecule"
-          ]
-        },
-        "n2": {
-          "categories": [
-            "biolink:Gene",
-            "biolink:Protein"
-          ]
-        },
-
+        "nodes": {
+          "n0": {
+            "ids": []
+          },
+          "n1": {
+            "categories": [
+              "biolink:SmallMolecule"
+            ]
+          },
+          "n2": {
+            "categories": [
+              "biolink:Gene",
+              "biolink:Protein"
+            ]
+          }
+        }
+      }
+    }
+  },
   "cqs": {
     "results_limit": null,
     "edge_sources": [
       {
         "resource_id": "infores:cqs",
         "resource_role": "primary_knowledge_source"
-      }],
+      }
+    ],
     "attribute_type_ids": null
   }
 }
