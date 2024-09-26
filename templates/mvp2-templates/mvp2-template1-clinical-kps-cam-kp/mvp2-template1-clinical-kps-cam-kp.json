@@ -34,51 +34,29 @@
           "subject": "n1",
           "object": "n2",
           "predicates": [
-            "biolink:physically_interacts_with"
+            "biolink:interacts_with"
           ],
           "provided_by": {
             "allowlist": [
-              "infores:text-mining-provider-targeted",
-              "infores:molepro"
+              "infores:cam-kp"
             ]
           }
         },
-        "e2": {
-          "subject": "n3",
-          "object": "n2",
-          "predicates": [
-            "biolink:physically_interacts_with"
-          ]
-        },
-        "e3": {
-          "subject": "n2",
-          "object": "n0",
-          "predicates": [
-            "biolink:contributes_to",
-            "biolink:associated_with",
-            "biolink:gene_associated_with_condition"
-          ]
-        }
-      },
-      "nodes": {
-        "n0": {
-          "ids": []
-        },
-        "n1": {
-          "categories": [
-            "biolink:SmallMolecule"
-          ]
-        },
-        "n2": {
-          "categories": [
-            "biolink:Gene",
-            "biolink:Protein"
-          ]
-        },
-        "n3": {
-          "categories": [
-            "biolink:Drug"
-          ]
+        "nodes": {
+          "n0": {
+            "ids": []
+          },
+          "n1": {
+            "categories": [
+              "biolink:SmallMolecule"
+            ]
+          },
+          "n2": {
+            "categories": [
+              "biolink:Gene",
+              "biolink:Protein"
+            ]
+          }
         }
       }
     }
@@ -91,8 +69,6 @@
         "resource_role": "primary_knowledge_source"
       }
     ],
-    "attribute_type_ids": [
-      "biolink:max_research_phase"
-    ]
+    "attribute_type_ids": null
   }
 }
