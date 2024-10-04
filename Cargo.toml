@@ -11,7 +11,7 @@ async_once = "^0.2"
 bb8 = "^0.8"
 bb8-diesel = "^0.2"
 chrono = { version = "^0.4", features = ["serde"] }
-clap = { version = "^4.3", features = ["derive"] }
+clap = { version = "^4.5", features = ["derive"] }
 diesel = { version = "^2.1", features = ["postgres", "r2d2", "chrono", "serde_json"] }
 diesel-async = { version = "^0.4", features = ["bb8", "postgres"] }
 diesel_migrations = "^2.1"
@@ -20,9 +20,10 @@ env_logger = "^0.11"
 futures = "^0.3"
 hyper = { version = "^0.14", features = ["client", "http1", "stream", "tcp"] }
 itertools = "^0.13"
-lazy_static = "^1.4"
+lazy_static = "^1.5"
 log = { version = "^0.4", features = ["std"] }
 merge-hashmap = { version = "^0.1", features = ["default", "merge_derive-hashmap"] }
+peak_alloc = "^0.2"
 rayon = "^1.10"
 regex = "^1.10"
 reqwest = { version = "^0.12", features = ["default", "json"] }
@@ -33,7 +34,7 @@ serde_derive = "^1.0"
 serde_json = "^1.0"
 serde_with = { version = "^3.1", features = ["std", "macros", "json"] }
 strum = "^0.26"
-tokio = { version = "1.28.2", features = ["full"] }
+tokio = { version = "^1.40", features = ["full"] }
 trapi-model-rs = { git = "https://github.com/jdr0887/trapi-model-rs.git" }
 uuid = { version = "^1.4", features = ["v4"] }
 strum_macros = "0.26.4"
