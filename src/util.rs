@@ -1,4 +1,4 @@
-use crate::model::{AgentType, CQSCompositeScoreKey, CQSCompositeScoreValue, JobStatus, KnowledgeLevelType, QueryTemplate};
+use crate::model::{AgentType, CQSCompositeScoreKey, CQSCompositeScoreValue, Job, JobStatus, KnowledgeLevelType, QueryTemplate};
 use crate::{job_actions, template, util, CQS_INFORES, REQWEST_CLIENT, WHITELISTED_TEMPLATE_QUERIES};
 use chrono::Utc;
 use futures::future::join_all;
@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 use std::{env, fs};
 use trapi_model_rs::{
-    Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, Edge, EdgeBinding, KnowledgeType, Message, NodeBinding, QueryGraph, ResourceRoleEnum, Response,
+    Analysis, AsyncQuery, Attribute, AuxiliaryGraph, BiolinkPredicate, Edge, EdgeBinding, KnowledgeType, Message, NodeBinding, QueryGraph, ResourceRoleEnum, Response, Workflow,
 };
 
 #[allow(dead_code)]
@@ -475,11 +475,10 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
 
         write_wfr_response("post", &tr, &uuid, &cqs_query.name());
 
-        Some(tr)
-    } else {
-        None
+        return Some(tr);
     }
 
+    None
     // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(canned_query_response.message.clone());
     // let trapi_response = util::add_composite_score_attributes(canned_query_response, node_binding_to_log_odds_map, &cqs_query);
     // Some(trapi_response)
@@ -496,86 +495,97 @@ fn write_wfr_response(suffix: &str, trapi_response: &Response, uuid: &str, cqs_q
     }
 }
 
-/// pulls undone jobs from a db & begins processing asynchronous submissions
-pub async fn process_asyncquery_jobs() {
-    debug!("processing asyncquery jobs");
+pub async fn get_responses_from_job(query: &AsyncQuery) -> Vec<trapi_model_rs::Response> {
+    let mut responses: Vec<trapi_model_rs::Response> = vec![];
 
-    if let Ok(mut undone_jobs) = job_actions::find_undone().await {
-        for job in undone_jobs.iter_mut() {
-            info!("Processing Job: {}", job.id);
-
-            job.date_started = Some(Utc::now().naive_utc());
-            job.status = JobStatus::Running;
-            job_actions::update(job).await;
-
-            let query: AsyncQuery = serde_json::from_str(&*String::from_utf8_lossy(job.query.as_slice())).expect("Could not deserialize AsyncQuery");
-
-            let mut responses: Vec<trapi_model_rs::Response> = vec![];
-
-            if let Some(query_graph) = &query.message.query_graph {
-                if let Some((_edge_key, edge_value)) = &query_graph.edges.iter().find(|(_k, v)| {
-                    if let (Some(predicates), Some(knowledge_type)) = (&v.predicates, &v.knowledge_type) {
-                        if predicates.contains(&"biolink:treats".to_string()) && knowledge_type == &KnowledgeType::INFERRED {
-                            return true;
-                        }
-                    }
-                    return false;
-                }) {
-                    if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
-                        if let Some(ids) = &node_value.ids {
-                            let future_responses: Vec<_> = WHITELISTED_TEMPLATE_QUERIES.iter().map(|cqs_query| util::process(&query_graph, cqs_query, &ids)).collect();
-                            let joined_future_responses = join_all(future_responses).await;
-                            joined_future_responses
-                                .into_iter()
-                                .filter_map(std::convert::identity)
-                                .for_each(|trapi_response| responses.push(trapi_response));
-                        }
-                    }
+    if let Some(query_graph) = &query.message.query_graph {
+        if let Some((_edge_key, edge_value)) = &query_graph.edges.iter().find(|(_k, v)| {
+            if let (Some(predicates), Some(knowledge_type)) = (&v.predicates, &v.knowledge_type) {
+                if predicates.contains(&"biolink:treats".to_string()) && knowledge_type == &KnowledgeType::INFERRED {
+                    return true;
                 }
             }
-
-            if responses.is_empty() {
-                job.date_finished = Some(Utc::now().naive_utc());
-                job.status = JobStatus::Failed;
-                job_actions::update(job).await;
-            } else {
-                let mut message = query.message.clone();
-
-                responses.into_iter().for_each(|r| {
-                    message.merge(r.message);
-                });
-
-                sort_analysis_by_score(&mut message);
-                sort_results_by_analysis_score(&mut message);
-                correct_analysis_resource_id(&mut message);
-
-                if let Some(results) = &mut message.results {
-                    results.truncate(500);
+            return false;
+        }) {
+            if let Some((_node_key, node_value)) = &query_graph.nodes.iter().find(|(k, _v)| *k == &edge_value.object) {
+                if let Some(ids) = &node_value.ids {
+                    let future_responses: Vec<_> = WHITELISTED_TEMPLATE_QUERIES.iter().map(|cqs_query| util::process(&query_graph, cqs_query, &ids)).collect();
+                    let joined_future_responses = join_all(future_responses).await;
+                    joined_future_responses
+                        .into_iter()
+                        .filter_map(std::convert::identity)
+                        .for_each(|trapi_response| responses.push(trapi_response));
                 }
-
-                // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
-                // let message_with_score_attributes = util::add_composite_score_attributes(message, node_binding_to_log_odds_map);
-                // let mut ret = trapi_model_rs::Response::new(message_with_score_attributes);
-                let mut res = Response::new(message);
-                res.status = Some("Success".to_string());
-                res.workflow = query.workflow.clone();
-                res.biolink_version = Some(env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string()));
-                res.schema_version = Some(env::var("TRAPI_VERSION").unwrap_or("1.4.0".to_string()));
-
-                job.response = Some(serde_json::to_vec(&res).unwrap());
-                job.date_finished = Some(Utc::now().naive_utc());
-                job.status = JobStatus::Completed;
-                job_actions::update(job).await;
-
-                send_callback(query, res).await;
             }
         }
-    } else {
-        warn!("No Jobs to run");
     }
+    responses
 }
 
-pub async fn send_callback(query: AsyncQuery, ret: Response) {
+pub async fn merge_sort_truncate(mut message: Message, workflow: Option<Vec<Workflow>>, responses: Vec<trapi_model_rs::Response>) -> trapi_model_rs::Response {
+    message.results = Some(vec![]);
+
+    responses.into_iter().for_each(|r| {
+        message.merge(r.message);
+    });
+
+    sort_analysis_by_score(&mut message);
+    sort_results_by_analysis_score(&mut message);
+    correct_analysis_resource_id(&mut message);
+
+    if let Some(results) = &mut message.results {
+        results.truncate(500);
+    }
+
+    // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
+    // let message_with_score_attributes = util::add_composite_score_attributes(message, node_binding_to_log_odds_map);
+    // let mut ret = trapi_model_rs::Response::new(message_with_score_attributes);
+    let mut res = Response::new(message);
+    res.status = Some("Success".to_string());
+    res.workflow = workflow;
+    res.biolink_version = Some(env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string()));
+    res.schema_version = Some(env::var("TRAPI_VERSION").unwrap_or("1.4.0".to_string()));
+    res
+}
+
+/// pulls undone jobs from a db & begins processing asynchronous submissions
+pub async fn process_asyncquery_jobs(undone_jobs: Vec<Job>) {
+    debug!("processing asyncquery jobs");
+
+    if undone_jobs.is_empty() {
+        return;
+    }
+
+    for mut job in undone_jobs.into_iter() {
+        info!("Processing Job: {}", job.id);
+
+        job.date_started = Some(Utc::now().naive_utc());
+        job.status = JobStatus::Running;
+        job_actions::update(&job).await;
+
+        let query: AsyncQuery = serde_json::from_slice(&job.query.as_slice()).expect("Could not deserialize AsyncQuery");
+        let responses = get_responses_from_job(&query).await;
+
+        if responses.is_empty() {
+            job.date_finished = Some(Utc::now().naive_utc());
+            job.response = None;
+            job.status = JobStatus::Failed;
+            job_actions::update(&job).await;
+        } else {
+            let res = merge_sort_truncate(query.message.clone(), query.workflow.clone(), responses).await;
+
+            job.response = Some(serde_json::to_vec(&res).expect("Could not serialize response"));
+            job.date_finished = Some(Utc::now().naive_utc());
+            job.status = JobStatus::Completed;
+            job_actions::update(&job).await;
+
+            send_callback(query, res).await;
+        }
+    }
+    return;
+}
+
+pub async fn send_callback(query: AsyncQuery, ret: Response) -> bool {
     info!("ENTERING send_callback(AsyncQuery, Response)");
     let request_client = REQWEST_CLIENT.get().await;
 
@@ -602,25 +612,22 @@ pub async fn send_callback(query: AsyncQuery, ret: Response) {
         }
     }
 
-    if !was_successful {
-        warn!("failed to send response to callback url");
-    }
+    was_successful
 }
 
 pub async fn delete_stale_asyncquery_jobs() {
     debug!("deleting stale asyncquery jobs");
-    // let mut connection = AsyncPgConnection::establish(&std::env::var("DATABASE_URL")?).await?;
     if let Ok(jobs) = job_actions::find_all(None).await {
         let now = Utc::now().naive_utc();
-        let futures: Vec<_> = jobs
-            .iter()
+        let ids = jobs
+            .into_iter()
             .filter(|j| {
                 let diff = now - j.date_submitted;
                 diff.num_seconds() > 3600
             })
-            .map(|j| job_actions::delete(&j.id))
-            .collect();
-        let _ = join_all(futures);
+            .map(|j| j.id)
+            .collect_vec();
+        job_actions::delete_many(ids).await;
     }
 }
 
