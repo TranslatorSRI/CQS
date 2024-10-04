@@ -17,7 +17,6 @@ use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::AsyncPgConnection;
 use dotenvy::dotenv;
 use futures::future::join_all;
-use merge_hashmap::Merge;
 use reqwest::header;
 use reqwest::redirect::Policy;
 use rocket::fairing::AdHoc;
@@ -33,6 +32,10 @@ use std::time::Duration;
 use tokio::time::timeout;
 use trapi_model_rs::{AsyncQuery, AsyncQueryResponse, AsyncQueryStatusResponse, KnowledgeGraph, KnowledgeType, Query};
 // use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use peak_alloc::PeakAlloc;
+
+#[global_allocator]
+static PEAK_ALLOC: PeakAlloc = PeakAlloc;
 
 mod job_actions;
 mod model;
@@ -96,8 +99,8 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
             }
             return false;
         }) {
-            let job = NewJob::new(JobStatus::Queued, serde_json::to_string(&query).unwrap().into_bytes());
-            let job_id = job_actions::insert(&job).await.expect("did not insert");
+            let job = NewJob::new(JobStatus::Queued, serde_json::to_vec(&query).expect("Could not serialize query"));
+            let job_id = job_actions::insert(&job).await.expect("Could not insert Job into DB");
             let mut ret = AsyncQueryResponse::new(job_id.to_string());
             ret.status = Some(JobStatus::Queued.to_string());
             info!("LEAVING asyncquery(Json<AsyncQuery>) - OK");
@@ -106,6 +109,7 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
             let mut message = query.message.clone();
             message.results = Some(vec![]);
             message.knowledge_graph = Some(KnowledgeGraph::new(HashMap::new(), HashMap::new()));
+
             let mut res = trapi_model_rs::Response::new(message);
             res.status = Some("Success".to_string());
             res.workflow = query.workflow.clone();
@@ -174,31 +178,12 @@ async fn query(data: Json<Query>) -> Json<trapi_model_rs::Response> {
         }
     }
 
-    let mut message = query.message.clone();
-    message.results = Some(vec![]);
-
-    responses.into_iter().for_each(|r| {
-        message.merge(r.message);
-    });
-
-    util::sort_analysis_by_score(&mut message);
-    util::sort_results_by_analysis_score(&mut message);
-    util::correct_analysis_resource_id(&mut message);
-
-    if let Some(results) = &mut message.results {
-        results.truncate(500);
-    }
+    let res = util::merge_sort_truncate(query.message.clone(), query.workflow.clone(), responses).await;
 
     // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
-    //
     // let mut ret = trapi_model_rs::Response::new(util::add_composite_score_attributes(message, node_binding_to_log_odds_map));
-    let mut ret = trapi_model_rs::Response::new(message);
-    ret.status = Some("Success".to_string());
-    ret.workflow = query.workflow.clone();
-    ret.biolink_version = Some(env::var("BIOLINK_VERSION").unwrap_or("3.1.2".to_string()));
-    ret.schema_version = Some(env::var("TRAPI_VERSION").unwrap_or("1.4.0".to_string()));
 
-    Json(ret)
+    Json(res)
 }
 
 #[openapi]
@@ -228,6 +213,7 @@ async fn version() -> serde_json::Value {
 async fn main() {
     dotenv().ok();
     env_logger::init();
+
     let launch_result = create_server().launch().await;
     match launch_result {
         Ok(_) => info!("Rocket shut down gracefully."),
@@ -245,30 +231,37 @@ pub fn create_server() -> Rocket<Build> {
             }),
         )
         .attach(AdHoc::on_liftoff("delete stale asyncquery jobs", |_| {
-            Box::pin(async move {
-                let start = tokio::time::Instant::now() + Duration::from_secs(5);
-                tokio::task::spawn(async move {
+            Box::pin(async {
+                tokio::task::spawn(async {
+                    let start = tokio::time::Instant::now() + Duration::from_secs(5);
                     let mut interval_timer = tokio::time::interval_at(start, Duration::from_secs(600));
                     loop {
                         interval_timer.tick().await;
-                        let res = timeout(Duration::from_secs(30), util::delete_stale_asyncquery_jobs()).await;
-                        if res.is_err() {
-                            warn!("deleting asyncquery jobs timed out");
+                        match timeout(Duration::from_secs(30), util::delete_stale_asyncquery_jobs()).await {
+                            Ok(_) => {}
+                            Err(_) => {
+                                warn!("deleting asyncquery jobs timed out")
+                            }
                         }
                     }
                 });
             })
         }))
         .attach(AdHoc::on_liftoff("process asyncquery jobs", |_| {
-            Box::pin(async move {
-                let start = tokio::time::Instant::now() + Duration::from_secs(15);
-                tokio::task::spawn(async move {
-                    let mut interval_timer = tokio::time::interval_at(start, Duration::from_secs(15));
+            Box::pin(async {
+                tokio::task::spawn(async {
+                    let start = tokio::time::Instant::now() + Duration::from_secs(15);
+                    let mut interval_timer = tokio::time::interval_at(start, Duration::from_secs(30));
                     loop {
                         interval_timer.tick().await;
-                        let res = timeout(Duration::from_secs(450), util::process_asyncquery_jobs()).await;
-                        if res.is_err() {
-                            warn!("processing asyncqueries timed out");
+                        if let Ok(undone_jobs) = job_actions::find_undone().await {
+                            info!("processing async jobs - current memory: {}MB", PEAK_ALLOC.peak_usage_as_mb());
+                            match timeout(Duration::from_secs(450), util::process_asyncquery_jobs(undone_jobs)).await {
+                                Ok(_) => {}
+                                Err(_) => {
+                                    warn!("processing asyncqueries timed out")
+                                }
+                            }
                         }
                     }
                 });
