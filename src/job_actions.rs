@@ -95,6 +95,21 @@ pub async fn delete(gid: &i32) {
     }
 }
 
+pub async fn delete_many(ids: Vec<i32>) {
+    let pool = crate::DB_POOL.get().await;
+    match pool.get().await {
+        Ok(mut conn) => {
+            let statement = diesel::delete(jobs.filter(id.eq_any(ids)));
+            // debug!("{}", diesel::debug_query::<diesel::pg::Pg, _>(&statement).to_string());
+            let num_deleted = statement.execute(&mut conn).await;
+            debug!("num_deleted: {}", num_deleted.unwrap());
+        }
+        Err(e) => {
+            error!("There was a problem getting a connection: {}", e);
+        }
+    }
+}
+
 pub async fn update(job: &Job) {
     let pool = crate::DB_POOL.get().await;
     match pool.get().await {
