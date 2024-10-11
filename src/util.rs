@@ -8,6 +8,7 @@ use rayon::prelude::*;
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
+use std::ops::Div;
 use std::time::Duration;
 use std::{env, fs};
 use trapi_model_rs::{
@@ -469,7 +470,8 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
 
         if let Some(results) = &mut tr.message.results {
             if let Some(limit) = query_template.cqs.results_limit {
-                results.truncate(limit);
+                let truncate_size = (crate::TRAPI_MESSAGE_RESULT_LIMIT.clone() as f32).div(limit).round() as usize;
+                results.truncate(truncate_size);
             }
         }
 
@@ -534,7 +536,7 @@ pub async fn merge_sort_truncate(mut message: Message, workflow: Option<Vec<Work
     correct_analysis_resource_id(&mut message);
 
     if let Some(results) = &mut message.results {
-        results.truncate(500);
+        results.truncate(crate::TRAPI_MESSAGE_RESULT_LIMIT.clone() as usize);
     }
 
     // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);
