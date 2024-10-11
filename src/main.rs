@@ -82,6 +82,7 @@ lazy_static! {
         }
     });
     pub static ref CQS_INFORES: String = "infores:cqs".to_string();
+    pub static ref TRAPI_MESSAGE_RESULT_LIMIT: i32 = 500;
 }
 
 #[openapi]
