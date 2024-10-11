@@ -41,7 +41,7 @@ pub enum KnowledgeLevelType {
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct CQS {
     pub scoring_function: Option<String>,
-    pub results_limit: Option<usize>,
+    pub results_limit: Option<f32>,
     pub attribute_type_ids: Option<Vec<String>>,
     pub edge_sources: Vec<RetrievalSource>,
 }

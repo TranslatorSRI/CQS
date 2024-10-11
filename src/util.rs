@@ -5,9 +5,11 @@ use futures::future::join_all;
 use itertools::Itertools;
 use merge_hashmap::Merge;
 use rayon::prelude::*;
+use rocket::form::validate::Contains;
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
+use std::ops::Div;
 use std::time::Duration;
 use std::{env, fs};
 use trapi_model_rs::{
@@ -469,7 +471,48 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
 
         if let Some(results) = &mut tr.message.results {
             if let Some(limit) = query_template.cqs.results_limit {
-                results.truncate(limit);
+                let truncate_size = (crate::TRAPI_MESSAGE_RESULT_LIMIT.clone() as f32).div(limit).round() as usize;
+                results.truncate(truncate_size);
+            }
+            let query_graph_edge_sub_and_obj_keys = query_graph
+                .edges
+                .iter()
+                .map(|(_k, v)| (v.subject.clone(), v.object.clone()))
+                .collect::<Vec<(String, String)>>();
+            if let Some((subject_key, object_key)) = query_graph_edge_sub_and_obj_keys.first() {
+                let result_node_bindings_subject_object_pairs: Vec<(String, String)> = results
+                    .iter()
+                    .map(|result| {
+                        let nb_subjects = result.node_bindings.get(subject_key).unwrap();
+                        let nb_subject = nb_subjects.first().unwrap();
+
+                        let nb_objects = result.node_bindings.get(object_key).unwrap();
+                        let nb_object = nb_objects.first().unwrap();
+
+                        (nb_subject.id.clone(), nb_object.id.clone())
+                    })
+                    .collect();
+                if let Some(knowledge_graph) = &mut tr.message.knowledge_graph {
+                    let kg_keys_to_remove = knowledge_graph
+                        .edges
+                        .iter()
+                        .filter_map(|(k, v)| {
+                            let kg_edge = (v.subject.clone(), v.object.clone());
+                            match !result_node_bindings_subject_object_pairs.contains(kg_edge) {
+                                true => Some(k.clone()),
+                                false => None,
+                            }
+                        })
+                        .collect_vec();
+                    kg_keys_to_remove.iter().for_each(|k| {
+                        knowledge_graph.edges.remove(k);
+                    });
+                    if let Some(aux_graphs) = &mut tr.message.auxiliary_graphs {
+                        kg_keys_to_remove.iter().filter(|k| aux_graphs.contains_key(k)).for_each(|k| {
+                            aux_graphs.remove(k);
+                        });
+                    }
+                }
             }
         }
 
@@ -534,7 +577,7 @@ pub async fn merge_sort_truncate(mut message: Message, workflow: Option<Vec<Work
     correct_analysis_resource_id(&mut message);
 
     if let Some(results) = &mut message.results {
-        results.truncate(500);
+        results.truncate(crate::TRAPI_MESSAGE_RESULT_LIMIT.clone() as usize);
     }
 
     // let node_binding_to_log_odds_map = util::build_node_binding_to_log_odds_data_map(&message.knowledge_graph);

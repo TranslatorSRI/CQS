@@ -82,6 +82,7 @@ lazy_static! {
         }
     });
     pub static ref CQS_INFORES: String = "infores:cqs".to_string();
+    pub static ref TRAPI_MESSAGE_RESULT_LIMIT: i32 = 500;
 }
 
 #[openapi]
@@ -255,7 +256,7 @@ pub fn create_server() -> Rocket<Build> {
                     loop {
                         interval_timer.tick().await;
                         if let Ok(undone_jobs) = job_actions::find_undone().await {
-                            info!("processing async jobs - current memory: {}MB", PEAK_ALLOC.peak_usage_as_mb());
+                            debug!("processing async jobs - current memory: {}MB", PEAK_ALLOC.peak_usage_as_mb());
                             match timeout(Duration::from_secs(450), util::process_asyncquery_jobs(undone_jobs)).await {
                                 Ok(_) => {}
                                 Err(_) => {
