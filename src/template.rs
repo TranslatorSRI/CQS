@@ -35,8 +35,9 @@ macro_rules! impl_wrapper {
             }
 
             fn render_query_template(&self, ids: Vec<trapi_model_rs::CURIE>) -> QueryTemplate {
-                let file = format!("./templates/mvp1-templates/{}", $file.to_string());
-                let mut query: QueryTemplate = serde_json::from_str(&fs::read_to_string(file).unwrap()).unwrap();
+                let file = format!("./templates/{}", $file.to_string());
+                let file_contents = fs::read_to_string(file).unwrap();
+                let mut query: QueryTemplate = serde_json::from_str(&file_contents).unwrap();
                 if let Some(qg) = &mut query.message.query_graph {
                     if let Some(q_node) = qg.nodes.get_mut($template_disease_node_id) {
                         q_node.ids = Some(ids);
@@ -54,7 +55,7 @@ macro_rules! impl_wrapper {
 
 impl_wrapper!(
     ClinicalKPs,
-    "mvp1-template1-clinical-kps/mvp1-template1-clinical-kps.json",
+    "mvp1-templates/mvp1-template1-clinical-kps/mvp1-template1-clinical-kps.json",
     "n3", //template_drug_node_id
     "n0", //template_disease_node_id
     util::compute_composite_score
@@ -68,64 +69,95 @@ impl_wrapper!(
 // );
 impl_wrapper!(
     OpenPredict,
-    "mvp1-template3-openpredict/mvp1-template3-openpredict.json",
+    "mvp1-templates/mvp1-template3-openpredict/mvp1-template3-openpredict.json",
     "n0", //template_drug_node_id
     "n1", //template_disease_node_id
     util::compute_composite_score
 );
 impl_wrapper!(
     ServiceProviderAeolus,
-    "mvp1-template4-service-provider-aeolus/mvp1-template4-service-provider-aeolus.json",
+    "mvp1-templates/mvp1-template4-service-provider-aeolus/mvp1-template4-service-provider-aeolus.json",
     "n0", //template_drug_node_id
     "n1", //template_disease_node_id
     util::compute_composite_score
 );
 impl_wrapper!(
     SpokeChembl,
-    "mvp1-template5-spoke-chembl/mvp1-template5-spoke-chembl.json",
+    "mvp1-templates/mvp1-template5-spoke-chembl/mvp1-template5-spoke-chembl.json",
     "n00", //template_drug_node_id
     "n01", //template_disease_node_id
     util::compute_composite_score
 );
 impl_wrapper!(
     MoleProChembl,
-    "mvp1-template6-molepro-chembl/mvp1-template6-molepro-chembl.json",
+    "mvp1-templates/mvp1-template6-molepro-chembl/mvp1-template6-molepro-chembl.json",
     "n00", //template_drug_node_id
     "n01", //template_disease_node_id
     util::compute_composite_score
 );
 impl_wrapper!(
     RTXKG2SemMed,
-    "mvp1-template7-rtxkg2-semmed/mvp1-template7-rtxkg2-semmed.json",
+    "mvp1-templates/mvp1-template7-rtxkg2-semmed/mvp1-template7-rtxkg2-semmed.json",
     "n0", //template_drug_node_id
     "n1", //template_disease_node_id
     util::compute_composite_score
 );
 impl_wrapper!(
     ServiceProviderSemMed,
-    "mvp1-template8-service-provider-semmed/mvp1-template8-service-provider-semmed.json",
+    "mvp1-templates/mvp1-template8-service-provider-semmed/mvp1-template8-service-provider-semmed.json",
     "n0", //template_drug_node_id
     "n1", //template_disease_node_id
     util::compute_composite_score
 );
 impl_wrapper!(
     ServiceProviderChembl,
-    "mvp1-template9-service-provider-chembl/mvp1-template9-service-provider-chembl.json",
+    "mvp1-templates/mvp1-template9-service-provider-chembl/mvp1-template9-service-provider-chembl.json",
     "n00", //template_drug_node_id
     "n01", //template_disease_node_id
     util::compute_composite_score
 );
 impl_wrapper!(
     ServiceProviderTMKPTargeted,
-    "mvp1-template10-service-provider-tmkp-targeted/mvp1-template10-service-provider-tmkp-targeted.json",
+    "mvp1-templates/mvp1-template10-service-provider-tmkp-targeted/mvp1-template10-service-provider-tmkp-targeted.json",
     "n0", //template_drug_node_id
     "n1", //template_disease_node_id
     util::compute_composite_score
 );
 impl_wrapper!(
     MultiomicsCTKP,
-    "mvp-template11-multiomics-ctkp/mvp1-template11-multiomics-ctkp.json",
+    "mvp1-templates/mvp-template11-multiomics-ctkp/mvp1-template11-multiomics-ctkp.json",
     "n00", //template_drug_node_id
     "n01", //template_disease_node_id
     util::compute_composite_score
 );
+impl_wrapper!(
+    CAMKP,
+    "mvp2-templates/mvp2-template1-clinical-kps-cam-kp/mvp2-template1-clinical-kps-cam-kp.json",
+    "n1", //template_drug_node_id
+    "n0", //template_disease_node_id
+    util::compute_composite_score
+);
+
+#[cfg(test)]
+mod test {
+    use crate::model::QueryTemplate;
+    use std::fmt::Debug;
+    use std::fs;
+
+    #[test]
+    fn deserialize_query_template() {
+        let file = format!(
+            "./templates/{}",
+            "mvp2-templates/mvp2-template1-clinical-kps-cam-kp/mvp2-template1-clinical-kps-cam-kp.json"
+        );
+        let ids: Vec<trapi_model_rs::CURIE> = vec![trapi_model_rs::CURIE::from("MONDO:0004979")];
+        let file_contents = fs::read_to_string(file).unwrap();
+        let mut query: QueryTemplate = serde_json::from_str(&file_contents).unwrap();
+        if let Some(qg) = &mut query.message.query_graph {
+            if let Some(q_node) = qg.nodes.get_mut("n0") {
+                q_node.ids = Some(ids);
+            }
+        }
+        assert!(true);
+    }
+}
