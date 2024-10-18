@@ -508,8 +508,10 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
                         knowledge_graph.edges.remove(k);
                     });
                     if let Some(aux_graphs) = &mut tr.message.auxiliary_graphs {
-                        kg_keys_to_remove.iter().filter(|k| aux_graphs.contains_key(k)).for_each(|k| {
-                            aux_graphs.remove(k);
+                        kg_keys_to_remove.iter().for_each(|k| {
+                            if aux_graphs.contains_key(k) {
+                                aux_graphs.remove(k);
+                            }
                         });
                     }
                 }

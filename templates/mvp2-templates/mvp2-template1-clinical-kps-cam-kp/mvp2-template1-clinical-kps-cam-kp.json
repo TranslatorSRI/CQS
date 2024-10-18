@@ -16,12 +16,12 @@
     "query_graph": {
       "edges": {
         "e0": {
+          "subject": "n0",
+          "object": "n1",
           "predicates": [
             "biolink:correlated_with",
             "biolink:associated_with_likelihood_of"
           ],
-          "subject": "n0",
-          "object": "n1",
           "provided_by": {
             "allowlist": [
               "infores:automat-icees-kg",
@@ -41,28 +41,28 @@
               "infores:cam-kp"
             ]
           }
+        }
+      },
+      "nodes": {
+        "n0": {
+          "ids": []
         },
-        "nodes": {
-          "n0": {
-            "ids": []
-          },
-          "n1": {
-            "categories": [
-              "biolink:SmallMolecule"
-            ]
-          },
-          "n2": {
-            "categories": [
-              "biolink:Gene",
-              "biolink:Protein"
-            ]
-          }
+        "n1": {
+          "categories": [
+            "biolink:SmallMolecule"
+          ]
+        },
+        "n2": {
+          "categories": [
+            "biolink:Gene",
+            "biolink:Protein"
+          ]
         }
       }
     }
   },
   "cqs": {
-    "results_limit": 25,
+    "results_limit": 16,
     "edge_sources": [
       {
         "resource_id": "infores:cqs",
