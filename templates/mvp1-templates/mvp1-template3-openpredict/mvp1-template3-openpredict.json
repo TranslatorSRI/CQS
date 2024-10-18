@@ -36,7 +36,7 @@
     }
   },
   "cqs": {
-    "results_limit": 25,
+    "results_limit": 16,
     "edge_sources": [
       {
         "resource_id": "infores:cqs",
