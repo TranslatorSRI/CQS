@@ -48,14 +48,11 @@ lazy_static! {
     pub static ref WHITELISTED_TEMPLATE_QUERIES: Vec<Box<dyn template::CQSTemplate>> = vec![
         Box::new(template::ClinicalKPs::new()),
         Box::new(template::OpenPredict::new()),
-        Box::new(template::ServiceProviderAeolus::new()),
-        Box::new(template::SpokeChembl::new()),
-        Box::new(template::MoleProChembl::new()),
         Box::new(template::RTXKG2SemMed::new()),
         Box::new(template::ServiceProviderSemMed::new()),
-        Box::new(template::ServiceProviderChembl::new()),
         Box::new(template::ServiceProviderTMKPTargeted::new()),
         Box::new(template::MultiomicsCTKP::new()),
+        Box::new(template::MultiomicsDrugApprovalsFAERS::new()),
         Box::new(template::CAMKP::new()),
     ];
     pub static ref DB_POOL: AsyncOnce<bb8::Pool<AsyncDieselConnectionManager<AsyncPgConnection>>> = AsyncOnce::new(async {
@@ -89,7 +86,6 @@ lazy_static! {
 #[openapi]
 #[post("/asyncquery", data = "<data>")]
 async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, status::Custom<Json<AsyncQuery>>> {
-    info!("ENTERING asyncquery(Json<AsyncQuery>)");
     let query: AsyncQuery = data.clone().into_inner();
 
     if let Some(query_graph) = &query.message.query_graph {
@@ -105,7 +101,6 @@ async fn asyncquery(data: Json<AsyncQuery>) -> Result<Json<AsyncQueryResponse>, 
             let job_id = job_actions::insert(&job).await.expect("Could not insert Job into DB");
             let mut ret = AsyncQueryResponse::new(job_id.to_string());
             ret.status = Some(JobStatus::Queued.to_string());
-            info!("LEAVING asyncquery(Json<AsyncQuery>) - OK");
             return Ok(Json(ret));
         } else {
             let mut message = query.message.clone();
