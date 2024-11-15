@@ -5,7 +5,6 @@ use futures::future::join_all;
 use itertools::Itertools;
 use merge_hashmap::Merge;
 use rayon::prelude::*;
-use rocket::form::validate::Contains;
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
@@ -384,7 +383,7 @@ pub fn compute_composite_score(entry_values: Vec<CQSCompositeScoreValue>) -> f64
     }
 }
 
-pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi_model_rs::CURIE>) -> Option<Response> {
+pub async fn send_to_wfr(cqs_query: &Box<dyn template::CQSTemplate>, query: &trapi_model_rs::Query) -> Option<Response> {
     let request_client = REQWEST_CLIENT.get().await;
 
     let workflow_runner_url = format!(
@@ -394,14 +393,6 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
 
     let backoff_multiplier = 2;
     let retries = 3;
-
-    let mut query_template: QueryTemplate = cqs_query.render_query_template(ids.clone());
-
-    let attribute_constraint = query_template.first_edge_attribute_constraint();
-
-    query_template.remove_edge_attribute_constraints();
-    let query = query_template.to_query();
-    info!("cqs_query {} being sent to WFR: {}", cqs_query.name(), serde_json::to_string(&query).unwrap());
 
     let mut trapi_response = None;
     for attempt in 1..=retries {
@@ -434,10 +425,20 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
             tokio::time::sleep(Duration::from_secs(retry_backoff_sleep_duration)).await;
         }
     }
+    trapi_response
+}
 
-    if let Some(mut tr) = trapi_response {
+pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQSTemplate>, ids: &Vec<trapi_model_rs::CURIE>) -> Option<Response> {
+    let mut query_template: QueryTemplate = cqs_query.render_query_template(ids.clone());
+
+    let attribute_constraint = query_template.first_edge_attribute_constraint();
+
+    query_template.remove_edge_attribute_constraints();
+    let query = query_template.to_query();
+    info!("cqs_query {} being sent to WFR: {}", cqs_query.name(), serde_json::to_string(&query).unwrap());
+
+    if let Some(mut tr) = send_to_wfr(cqs_query, &query).await {
         let uuid = uuid::Uuid::new_v4().to_string();
-        // intended for debugging...writes
         write_wfr_response("pre", &tr, &uuid, &cqs_query.name());
 
         if let (Some(ac), Some(kg)) = (attribute_constraint, &mut tr.message.knowledge_graph) {
@@ -472,47 +473,42 @@ pub async fn process(query_graph: &QueryGraph, cqs_query: &Box<dyn template::CQS
         if let Some(results) = &mut tr.message.results {
             if let Some(limit) = query_template.cqs.results_limit {
                 let truncate_size = (crate::TRAPI_MESSAGE_RESULT_LIMIT.clone() as f32).div(limit).round() as usize;
+                info!("cqs_query: {} - results.len(): {}, truncate_size: {}", cqs_query.name(), results.len(), truncate_size);
                 results.truncate(truncate_size);
             }
-            let query_graph_edge_sub_and_obj_keys = query_graph
-                .edges
-                .iter()
-                .map(|(_k, v)| (v.subject.clone(), v.object.clone()))
-                .collect::<Vec<(String, String)>>();
-            if let Some((subject_key, object_key)) = query_graph_edge_sub_and_obj_keys.first() {
-                let result_node_bindings_subject_object_pairs: Vec<(String, String)> = results
+
+            if let Some(knowledge_graph) = &mut tr.message.knowledge_graph {
+                let edge_binding_ids: Vec<String> = results
                     .iter()
-                    .map(|result| {
-                        let nb_subjects = result.node_bindings.get(subject_key).unwrap();
-                        let nb_subject = nb_subjects.first().unwrap();
-
-                        let nb_objects = result.node_bindings.get(object_key).unwrap();
-                        let nb_object = nb_objects.first().unwrap();
-
-                        (nb_subject.id.clone(), nb_object.id.clone())
+                    .map(|r| {
+                        r.analyses
+                            .iter()
+                            .map(|a| {
+                                a.edge_bindings
+                                    .iter()
+                                    .map(|(_eb_key, eb_value)| eb_value.iter().map(|eb| eb.id.clone()).collect_vec())
+                                    .flatten()
+                                    .collect_vec()
+                            })
+                            .flatten()
+                            .collect_vec()
                     })
+                    .flatten()
                     .collect();
-                if let Some(knowledge_graph) = &mut tr.message.knowledge_graph {
-                    let kg_keys_to_remove = knowledge_graph
-                        .edges
-                        .iter()
-                        .filter_map(|(k, v)| {
-                            let kg_edge = (v.subject.clone(), v.object.clone());
-                            match !result_node_bindings_subject_object_pairs.contains(kg_edge) {
-                                true => Some(k.clone()),
-                                false => None,
-                            }
-                        })
-                        .collect_vec();
-                    kg_keys_to_remove.iter().for_each(|k| {
-                        knowledge_graph.edges.remove(k);
-                    });
-                    if let Some(aux_graphs) = &mut tr.message.auxiliary_graphs {
-                        kg_keys_to_remove.iter().for_each(|k| {
-                            if aux_graphs.contains_key(k) {
-                                aux_graphs.remove(k);
-                            }
-                        });
+                debug!("cqs_query: {} - edge_binding_ids: {:?}", cqs_query.name(), edge_binding_ids);
+                debug!("cqs_query: {} - knowledge_graph.edges.keys(): {:?}", cqs_query.name(), knowledge_graph.edges.keys());
+
+                for key in knowledge_graph.edges.keys().cloned().collect_vec() {
+                    if !edge_binding_ids.contains(&key) {
+                        knowledge_graph.edges.remove(&key);
+                    }
+                }
+
+                if let Some(aux_graphs) = &mut tr.message.auxiliary_graphs {
+                    for key in aux_graphs.keys().cloned().collect_vec() {
+                        if !edge_binding_ids.contains(&key) {
+                            aux_graphs.remove(&key);
+                        }
                     }
                 }
             }
