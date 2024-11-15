@@ -60,39 +60,11 @@ impl_wrapper!(
     "n0", //template_disease_node_id
     util::compute_composite_score
 );
-// impl_wrapper!(
-//     ConnectionHypothesis,
-//     "mvp1-template2-connections-hypothesis/mvp1-template2-connection-hypothesis.json",
-//     "n0", //template_drug_node_id
-//     "n1", //template_disease_node_id
-//     compute_composite_score
-// );
 impl_wrapper!(
     OpenPredict,
     "mvp1-templates/mvp1-template3-openpredict/mvp1-template3-openpredict.json",
     "n0", //template_drug_node_id
     "n1", //template_disease_node_id
-    util::compute_composite_score
-);
-impl_wrapper!(
-    ServiceProviderAeolus,
-    "mvp1-templates/mvp1-template4-service-provider-aeolus/mvp1-template4-service-provider-aeolus.json",
-    "n0", //template_drug_node_id
-    "n1", //template_disease_node_id
-    util::compute_composite_score
-);
-impl_wrapper!(
-    SpokeChembl,
-    "mvp1-templates/mvp1-template5-spoke-chembl/mvp1-template5-spoke-chembl.json",
-    "n00", //template_drug_node_id
-    "n01", //template_disease_node_id
-    util::compute_composite_score
-);
-impl_wrapper!(
-    MoleProChembl,
-    "mvp1-templates/mvp1-template6-molepro-chembl/mvp1-template6-molepro-chembl.json",
-    "n00", //template_drug_node_id
-    "n01", //template_disease_node_id
     util::compute_composite_score
 );
 impl_wrapper!(
@@ -110,13 +82,6 @@ impl_wrapper!(
     util::compute_composite_score
 );
 impl_wrapper!(
-    ServiceProviderChembl,
-    "mvp1-templates/mvp1-template9-service-provider-chembl/mvp1-template9-service-provider-chembl.json",
-    "n00", //template_drug_node_id
-    "n01", //template_disease_node_id
-    util::compute_composite_score
-);
-impl_wrapper!(
     ServiceProviderTMKPTargeted,
     "mvp1-templates/mvp1-template10-service-provider-tmkp-targeted/mvp1-template10-service-provider-tmkp-targeted.json",
     "n0", //template_drug_node_id
@@ -128,6 +93,13 @@ impl_wrapper!(
     "mvp1-templates/mvp-template11-multiomics-ctkp/mvp1-template11-multiomics-ctkp.json",
     "n00", //template_drug_node_id
     "n01", //template_disease_node_id
+    util::compute_composite_score
+);
+impl_wrapper!(
+    MultiomicsDrugApprovalsFAERS,
+    "mvp1-templates/mvp-template-12-multiomics-drugapprovals-faers/mvp-template-12-multiomics-drugapprovals-faers.json",
+    "n0", //template_drug_node_id
+    "n1", //template_disease_node_id
     util::compute_composite_score
 );
 impl_wrapper!(
